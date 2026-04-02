@@ -16,6 +16,7 @@ const PROFILE_ID_TO_INFO = {
   lucas: { id: "lucas", name: "Lucas" },
 };
 const MESSAGES_STORAGE_KEY_PREFIX = "nathan-pc-messages-v1:";
+const CONVERSATIONS_STORAGE_KEY_PREFIX = "nathan-pc-convos-v1:";
 const STYLE_PROMPTS = {
   helpful: "You are Nathan's PC, a helpful assistant running through LM Studio on Nathan's computer. Keep your answers practical, friendly, and concise unless the user asks for more depth.",
   funny: "You are Nathan's PC, a witty and playful assistant running through LM Studio on Nathan's computer. Be funny in a light, friendly way, but still answer the user's request clearly and helpfully. Do not turn serious topics into jokes.",
@@ -40,6 +41,8 @@ const state = {
   theme: DEFAULT_THEME,
   isUnlocked: false,
   style: DEFAULT_STYLE,
+  conversationId: null,
+  conversations: [],
 };
 
 
@@ -54,6 +57,7 @@ const styleSelect = document.querySelector("#style-select");
 const statusText = document.querySelector("#status-text");
 const clearChatButton = document.querySelector("#clear-chat");
 const signOutButton = document.querySelector("#sign-out");
+const newChatButton = document.querySelector("#new-chat");
 const promptButtons = document.querySelectorAll(".prompt-chip");
 const unlockForm = document.querySelector("#unlock-form");
 const passwordInput = document.querySelector("#password-input");
@@ -80,7 +84,10 @@ function getAssistantDisplayName() {
   return "Nathan's PC";
 }
 
-function getMessagesStorageKey(profileId) {
+function getMessagesStorageKey(profileId, conversationId) {
+  if (conversationId) {
+    return `${MESSAGES_STORAGE_KEY_PREFIX}${profileId}:${conversationId}`;
+  }
   return `${MESSAGES_STORAGE_KEY_PREFIX}${profileId}`;
 }
 
@@ -158,14 +165,176 @@ function loadSavedMessages(profileId) {
 
 function saveMessagesToStorage() {
   try {
-    if (!state.profileId) {
+    if (!state.profileId || !state.conversationId) {
       return;
     }
     const toStore = state.messages.slice(-MAX_STORED_MESSAGES);
-    localStorage.setItem(getMessagesStorageKey(state.profileId), JSON.stringify(toStore));
+    localStorage.setItem(getMessagesStorageKey(state.profileId, state.conversationId), JSON.stringify(toStore));
+    const convo = state.conversations.find(c => c.id === state.conversationId);
+    if (convo) {
+      convo.updatedAt = Date.now();
+    }
   } catch (error) {
-    // Storage can fail (private mode, quota, etc). Don't break chat.
     console.error("Unable to save chat messages", error);
+  }
+}
+
+function generateId() {
+  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+}
+
+function getConversationsStorageKey(profileId) {
+  return `${CONVERSATIONS_STORAGE_KEY_PREFIX}${profileId}`;
+}
+
+function loadConversations(profileId) {
+  try {
+    const raw = localStorage.getItem(getConversationsStorageKey(profileId));
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || !parsed.length) {
+      return null;
+    }
+    return parsed.filter(c => c && typeof c.id === "string" && typeof c.title === "string");
+  } catch (error) {
+    console.error("Unable to load conversations", error);
+    return null;
+  }
+}
+
+function saveConversations() {
+  try {
+    localStorage.setItem(getConversationsStorageKey(state.profileId), JSON.stringify(state.conversations));
+  } catch (error) {
+    console.error("Unable to save conversations", error);
+  }
+}
+
+function loadConversationMessages(profileId, conversationId) {
+  try {
+    const raw = localStorage.getItem(getMessagesStorageKey(profileId, conversationId));
+    if (!raw) {
+      return null;
+    }
+    return sanitizeLoadedMessages(JSON.parse(raw));
+  } catch (error) {
+    console.error("Unable to load conversation messages", error);
+    return null;
+  }
+}
+
+function createNewConversation(messages) {
+  const id = generateId();
+  const convo = { id, title: "New chat", updatedAt: Date.now() };
+  state.conversations.unshift(convo);
+  state.conversationId = id;
+  state.messages = messages || [
+    {
+      role: "assistant",
+      content: `${getAssistantDisplayName()} is online. Ask me anything about code, writing, or what this machine can help with.`,
+    },
+  ];
+  saveConversations();
+  saveMessagesToStorage();
+  return id;
+}
+
+function autoTitleConversation() {
+  const firstUser = state.messages.find(m => m.role === "user");
+  if (!firstUser) {
+    return;
+  }
+  const raw = firstUser.content.trim();
+  const title = raw.length > 42 ? raw.slice(0, 42) + "\u2026" : raw;
+  const convo = state.conversations.find(c => c.id === state.conversationId);
+  if (convo && convo.title === "New chat") {
+    convo.title = title;
+    saveConversations();
+    renderConversationList();
+  }
+}
+
+function switchToConversation(convoId) {
+  if (convoId === state.conversationId) {
+    return;
+  }
+  saveMessagesToStorage();
+  state.conversationId = convoId;
+  const msgs = loadConversationMessages(state.profileId, convoId);
+  state.messages = msgs || [
+    {
+      role: "assistant",
+      content: `${getAssistantDisplayName()} is online. Ask me anything about code, writing, or what this machine can help with.`,
+    },
+  ];
+  renderMessages(true);
+  renderConversationList();
+}
+
+function deleteConversation(convoId) {
+  try {
+    localStorage.removeItem(getMessagesStorageKey(state.profileId, convoId));
+  } catch (error) {
+    console.error("Unable to delete conversation messages", error);
+  }
+
+  state.conversations = state.conversations.filter(c => c.id !== convoId);
+  saveConversations();
+
+  if (state.conversationId === convoId) {
+    if (state.conversations.length) {
+      state.conversationId = state.conversations[0].id;
+      const msgs = loadConversationMessages(state.profileId, state.conversationId);
+      state.messages = msgs || [
+        {
+          role: "assistant",
+          content: `${getAssistantDisplayName()} is online. Ask me anything about code, writing, or what this machine can help with.`,
+        },
+      ];
+      renderMessages(true);
+    } else {
+      createNewConversation();
+      renderMessages(true);
+    }
+  }
+
+  renderConversationList();
+}
+
+function renderConversationList() {
+  const list = document.querySelector("#conversation-list");
+  if (!list) {
+    return;
+  }
+  list.innerHTML = "";
+
+  for (const convo of state.conversations) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "convo-item" + (convo.id === state.conversationId ? " active" : "");
+
+    const title = document.createElement("span");
+    title.className = "convo-item-title";
+    title.textContent = convo.title;
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "convo-delete-btn";
+    del.setAttribute("aria-label", "Delete conversation");
+    del.textContent = "\u00d7";
+    del.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteConversation(convo.id);
+    });
+
+    item.append(title, del);
+    item.addEventListener("click", () => {
+      switchToConversation(convo.id);
+    });
+
+    list.appendChild(item);
   }
 }
 
@@ -194,19 +363,34 @@ function setUnlockState(isUnlocked) {
     passwordInput.value = "";
     loadModels();
 
-    const savedMessages = loadSavedMessages(state.profileId);
-    state.messages =
-      savedMessages ||
-      [
+    const savedConvos = loadConversations(state.profileId);
+    if (savedConvos && savedConvos.length) {
+      state.conversations = savedConvos;
+      state.conversationId = savedConvos[0].id;
+      const msgs = loadConversationMessages(state.profileId, state.conversationId);
+      state.messages = msgs || [
         {
           role: "assistant",
           content: `${getAssistantDisplayName()} is online. Ask me anything about code, writing, or what this machine can help with.`,
         },
       ];
-    renderMessages();
+    } else {
+      // Migrate any legacy single-conversation messages into the new format
+      const legacyMsgs = loadSavedMessages(state.profileId);
+      state.conversations = [];
+      state.conversationId = null;
+      createNewConversation(legacyMsgs || undefined);
+      if (legacyMsgs) {
+        autoTitleConversation();
+      }
+    }
 
+    renderConversationList();
+    renderMessages(true);
     messageInput.focus();
   } else {
+    state.conversations = [];
+    state.conversationId = null;
     passwordInput.focus();
   }
 }
@@ -562,6 +746,7 @@ async function sendMessage(messageText) {
       content: assistantMessage || `${getAssistantDisplayName()} did not return any text.`,
     });
     saveMessagesToStorage();
+    autoTitleConversation();
     setStatus(`Connected to ${state.model}.`);
   } catch (error) {
     console.error(error);
@@ -574,6 +759,7 @@ async function sendMessage(messageText) {
   } finally {
     document.querySelector("#streaming-message")?.remove();
     renderMessages();
+    renderConversationList();
     setSending(false);
     messageInput.focus();
   }
@@ -616,11 +802,28 @@ clearChatButton.addEventListener("click", () => {
     },
   ];
 
+  const convo = state.conversations.find(c => c.id === state.conversationId);
+  if (convo) {
+    convo.title = "New chat";
+    saveConversations();
+  }
+
   saveMessagesToStorage();
   renderMessages();
+  renderConversationList();
   setStatus(`Connected to ${state.model}.`);
   messageInput.focus();
 });
+
+if (newChatButton) {
+  newChatButton.addEventListener("click", () => {
+    createNewConversation();
+    renderMessages(true);
+    renderConversationList();
+    setStatus(`Connected to ${state.model}.`);
+    messageInput.focus();
+  });
+}
 
 promptButtons.forEach((button) => {
   button.addEventListener("click", () => {

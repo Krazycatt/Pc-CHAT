@@ -530,9 +530,10 @@ body[data-locked="false"] .lock-screen {
 .sidebar {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 24px;
   gap: 18px;
+  overflow-y: auto;
 }
 
 .chat-layout {
@@ -1521,6 +1522,97 @@ body[data-theme="gemini"] .message.user {
 
 body[data-theme="gemini"] #send-button {
   background: linear-gradient(135deg, #4f7cff, #7b61ff);
+}
+
+.convos-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.new-chat-button {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  transition:
+    transform 0.16s ease,
+    opacity 0.16s ease;
+}
+
+.new-chat-button:hover {
+  transform: translateY(-1px);
+  opacity: 0.88;
+}
+
+.conversation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.convo-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.convo-item:hover {
+  background: var(--accent-soft);
+}
+
+.convo-item.active {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.convo-item-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+}
+
+.convo-delete-btn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.convo-item:hover .convo-delete-btn {
+  opacity: 1;
+}
+
+.convo-delete-btn:hover {
+  background: rgba(200, 50, 50, 0.15);
+  color: #c64747;
 }
 
 @keyframes rise-in {
