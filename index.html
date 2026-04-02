@@ -35,8 +35,8 @@
     <aside class="sidebar">
       <div>
         <p class="eyebrow">Local AI Link</p>
-        <h1>Nathan's PC</h1>
-        <p class="sidebar-copy">
+        <h1 id="assistant-title">Nathan's PC</h1>
+        <p id="assistant-subtitle" class="sidebar-copy">
           A simple ChatGPT-style front end pointed at Nathan's LM Studio server.
         </p>
       </div>
@@ -79,6 +79,7 @@
         </div>
 
         <button id="clear-chat" class="secondary-button" type="button">Clear conversation</button>
+        <button id="sign-out" class="secondary-button" type="button">Sign out</button>
       </div>
 
       <div class="panel stack-gap">
@@ -95,7 +96,7 @@
       <header class="chat-header">
         <div>
           <p class="eyebrow">Chat Interface</p>
-          <h2>Talk to Nathan's PC</h2>
+          <h2 id="chat-title">Talk to Nathan's PC</h2>
         </div>
         <p id="status-text" class="status-text">Loading models...</p>
       </header>
@@ -103,7 +104,7 @@
       <section id="chat-log" class="chat-log" aria-live="polite"></section>
 
       <form id="chat-form" class="composer" autocomplete="off">
-        <label class="sr-only" for="message-input">Message Nathan's PC</label>
+        <label id="message-label" class="sr-only" for="message-input">Message Nathan's PC</label>
         <textarea
           id="message-input"
           rows="1"

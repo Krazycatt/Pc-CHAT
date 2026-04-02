@@ -5,8 +5,17 @@ const UNLOCK_STORAGE_KEY = "nathan-pc-unlocked";
 const STYLE_STORAGE_KEY = "nathan-pc-style";
 const DEFAULT_THEME = "current";
 const AVAILABLE_THEMES = new Set(["current", "spacy", "liquid-glass", "neon-riot", "volcanic", "midnight-terminal", "candy-pop", "chatgpt", "claude", "gemini"]);
-const APP_PASSWORD = "knox";
-const MESSAGES_STORAGE_KEY = "nathan-pc-messages-v1";
+const PASSWORD_TO_PROFILE = {
+  knox: { id: "nathan", name: "Nathan" },
+  max: { id: "lucas", name: "Lucas" },
+};
+const PROFILE_STORAGE_KEY = "nathan-pc-profile-v1";
+const DEFAULT_PROFILE_ID = "nathan";
+const PROFILE_ID_TO_INFO = {
+  nathan: { id: "nathan", name: "Nathan" },
+  lucas: { id: "lucas", name: "Lucas" },
+};
+const MESSAGES_STORAGE_KEY_PREFIX = "nathan-pc-messages-v1:";
 const STYLE_PROMPTS = {
   helpful: "You are Nathan's PC, a helpful assistant running through LM Studio on Nathan's computer. Keep your answers practical, friendly, and concise unless the user asks for more depth.",
   funny: "You are Nathan's PC, a witty and playful assistant running through LM Studio on Nathan's computer. Be funny in a light, friendly way, but still answer the user's request clearly and helpfully. Do not turn serious topics into jokes.",
@@ -18,6 +27,8 @@ const DEFAULT_STYLE = "helpful";
 const MAX_STORED_MESSAGES = 60; // cap storage to avoid growing forever
 
 const state = {
+  profileId: DEFAULT_PROFILE_ID,
+  profileName: PROFILE_ID_TO_INFO[DEFAULT_PROFILE_ID]?.name || "Nathan",
   messages: [
     {
       role: "assistant",
@@ -41,10 +52,15 @@ const themeSelect = document.querySelector("#theme-select");
 const styleSelect = document.querySelector("#style-select");
 const statusText = document.querySelector("#status-text");
 const clearChatButton = document.querySelector("#clear-chat");
+const signOutButton = document.querySelector("#sign-out");
 const promptButtons = document.querySelectorAll(".prompt-chip");
 const unlockForm = document.querySelector("#unlock-form");
 const passwordInput = document.querySelector("#password-input");
 const unlockError = document.querySelector("#unlock-error");
+const assistantTitle = document.querySelector("#assistant-title");
+const assistantSubtitle = document.querySelector("#assistant-subtitle");
+const chatTitle = document.querySelector("#chat-title");
+const messageLabel = document.querySelector("#message-label");
 
 if (window.marked) {
   window.marked.setOptions({
@@ -55,6 +71,48 @@ if (window.marked) {
 
 function setStatus(message) {
   statusText.textContent = message;
+}
+
+function getAssistantDisplayName() {
+  const name = state.profileName || "Nathan";
+  return `${name}'s PC`;
+}
+
+function getMessagesStorageKey(profileId) {
+  return `${MESSAGES_STORAGE_KEY_PREFIX}${profileId}`;
+}
+
+function loadSavedProfileId() {
+  try {
+    return sessionStorage.getItem(PROFILE_STORAGE_KEY) || DEFAULT_PROFILE_ID;
+  } catch (error) {
+    console.error("Unable to read saved profile", error);
+    return DEFAULT_PROFILE_ID;
+  }
+}
+
+function applyProfile(profileId) {
+  const profileInfo = PROFILE_ID_TO_INFO[profileId] || PROFILE_ID_TO_INFO[DEFAULT_PROFILE_ID];
+
+  state.profileId = profileInfo.id;
+  state.profileName = profileInfo.name;
+
+  document.title = `${state.profileName}'s PC`;
+  if (assistantTitle) {
+    assistantTitle.textContent = getAssistantDisplayName();
+  }
+  if (assistantSubtitle) {
+    assistantSubtitle.textContent = `A simple ChatGPT-style front end pointed at ${state.profileName}'s LM Studio server.`;
+  }
+  if (chatTitle) {
+    chatTitle.textContent = `Talk to ${state.profileName}'s PC`;
+  }
+  if (messageLabel) {
+    messageLabel.textContent = `Message ${state.profileName}'s PC`;
+  }
+  if (messageInput) {
+    messageInput.placeholder = `Message ${state.profileName}'s PC...`;
+  }
 }
 
 function sanitizeLoadedMessages(value) {
@@ -78,9 +136,9 @@ function sanitizeLoadedMessages(value) {
   return cleaned.slice(-MAX_STORED_MESSAGES);
 }
 
-function loadSavedMessages() {
+function loadSavedMessages(profileId) {
   try {
-    const raw = localStorage.getItem(MESSAGES_STORAGE_KEY);
+    const raw = localStorage.getItem(getMessagesStorageKey(profileId));
     if (!raw) {
       return null;
     }
@@ -95,8 +153,11 @@ function loadSavedMessages() {
 
 function saveMessagesToStorage() {
   try {
+    if (!state.profileId) {
+      return;
+    }
     const toStore = state.messages.slice(-MAX_STORED_MESSAGES);
-    localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(toStore));
+    localStorage.setItem(getMessagesStorageKey(state.profileId), JSON.stringify(toStore));
   } catch (error) {
     // Storage can fail (private mode, quota, etc). Don't break chat.
     console.error("Unable to save chat messages", error);
@@ -128,11 +189,16 @@ function setUnlockState(isUnlocked) {
     passwordInput.value = "";
     loadModels();
 
-    const savedMessages = loadSavedMessages();
-    if (savedMessages) {
-      state.messages = savedMessages;
-      renderMessages();
-    }
+    const savedMessages = loadSavedMessages(state.profileId);
+    state.messages =
+      savedMessages ||
+      [
+        {
+          role: "assistant",
+          content: `${state.profileName}'s PC is online. Ask me anything about code, writing, or what this machine can help with.`,
+        },
+      ];
+    renderMessages();
 
     messageInput.focus();
   } else {
@@ -174,7 +240,9 @@ function applyStyle(styleName) {
 }
 
 function getSystemPrompt() {
-  return STYLE_PROMPTS[state.style] || STYLE_PROMPTS[DEFAULT_STYLE];
+  const base = STYLE_PROMPTS[state.style] || STYLE_PROMPTS[DEFAULT_STYLE];
+  // Swap "Nathan" -> current profile name in the system prompt.
+  return base.replaceAll("Nathan", state.profileName || "Nathan");
 }
 
 function applyTheme(themeName) {
@@ -243,7 +311,7 @@ function createMessageElement(role, content, options = {}) {
 
   const label = document.createElement("span");
   label.className = "message-label";
-  label.textContent = role === "assistant" ? "Nathan's PC" : "You";
+  label.textContent = role === "assistant" ? getAssistantDisplayName() : "You";
 
   const body = document.createElement("div");
   renderMessageBody(body, role, content);
@@ -475,7 +543,7 @@ async function sendMessage(messageText) {
 
     state.messages.push({
       role: "assistant",
-      content: assistantMessage || "Nathan's PC did not return any text.",
+      content: assistantMessage || `${getAssistantDisplayName()} did not return any text.`,
     });
     saveMessagesToStorage();
     setStatus(`Connected to ${state.model}.`);
@@ -483,7 +551,7 @@ async function sendMessage(messageText) {
     console.error(error);
     state.messages.push({
       role: "assistant",
-      content: `I hit a connection problem while talking to Nathan's PC.\n\n${error.message || "Unknown error"}`,
+      content: `I hit a connection problem while talking to ${getAssistantDisplayName()}.\n\n${error.message || "Unknown error"}`,
     });
     saveMessagesToStorage();
     setStatus("Connection issue. Check the LM Studio tunnel and try again.");
@@ -528,7 +596,7 @@ clearChatButton.addEventListener("click", () => {
   state.messages = [
     {
       role: "assistant",
-      content: "Fresh session started. Nathan's PC is ready when you are.",
+      content: `Fresh session started. ${getAssistantDisplayName()} is ready when you are.`,
     },
   ];
 
@@ -549,7 +617,16 @@ promptButtons.forEach((button) => {
 unlockForm.addEventListener("submit", (event) => {
   event.preventDefault();
 
-  if (passwordInput.value === APP_PASSWORD) {
+  const attemptedPassword = passwordInput.value.trim().toLowerCase();
+  const profile = PASSWORD_TO_PROFILE[attemptedPassword];
+
+  if (profile) {
+    applyProfile(profile.id);
+    try {
+      sessionStorage.setItem(PROFILE_STORAGE_KEY, profile.id);
+    } catch (error) {
+      console.error("Unable to save profile selection", error);
+    }
     setUnlockState(true);
     return;
   }
@@ -558,6 +635,21 @@ unlockForm.addEventListener("submit", (event) => {
   passwordInput.select();
 });
 
+if (signOutButton) {
+  signOutButton.addEventListener("click", () => {
+    try {
+      sessionStorage.removeItem(PROFILE_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    applyProfile(DEFAULT_PROFILE_ID);
+    setUnlockState(false);
+    messageInput.value = "";
+    unlockError.textContent = "";
+  });
+}
+
+applyProfile(loadSavedProfileId());
 renderMessages();
 resizeComposer();
 applyTheme(loadSavedTheme());
