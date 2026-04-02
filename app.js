@@ -40,27 +40,8 @@ const state = {
   theme: DEFAULT_THEME,
   isUnlocked: false,
   style: DEFAULT_STYLE,
-  autoScroll: true,
 };
 
-const AUTO_SCROLL_RESTORE_MS = 1500;
-let autoScrollRestoreTimer = null;
-let lastInteractionAt = 0;
-
-function markUserInteracting() {
-  // Turn off auto-scroll temporarily so the user can scroll normally.
-  state.autoScroll = false;
-  lastInteractionAt = Date.now();
-
-  if (autoScrollRestoreTimer) {
-    clearTimeout(autoScrollRestoreTimer);
-  }
-
-  autoScrollRestoreTimer = setTimeout(() => {
-    state.autoScroll = isUserNearBottom();
-    autoScrollRestoreTimer = null;
-  }, AUTO_SCROLL_RESTORE_MS);
-}
 
 const appShell = document.querySelector("#app-shell");
 const chatLog = document.querySelector("#chat-log");
@@ -90,39 +71,6 @@ if (window.marked) {
   });
 }
 
-if (chatLog) {
-  chatLog.addEventListener("scroll", () => {
-    // While the user is actively interacting, keep auto-scroll off.
-    if (!autoScrollRestoreTimer) {
-      state.autoScroll = isUserNearBottom();
-    }
-  });
-
-  // Some browsers/embeds can swallow wheel events when the page has `overflow: hidden`.
-  // Forward wheel scrolling into the chat container so the mouse works reliably.
-  chatLog.addEventListener(
-    "wheel",
-    (event) => {
-      markUserInteracting();
-      event.preventDefault();
-      chatLog.scrollTop += event.deltaY;
-    },
-    { passive: false },
-  );
-
-  chatLog.addEventListener("pointerdown", () => markUserInteracting());
-  chatLog.addEventListener(
-    "mousemove",
-    () => {
-      const now = Date.now();
-      if (now - lastInteractionAt > 250) {
-        lastInteractionAt = now;
-        markUserInteracting();
-      }
-    },
-    { passive: true },
-  );
-}
 
 function setStatus(message) {
   statusText.textContent = message;
@@ -326,12 +274,6 @@ function scrollChatToBottom() {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
-function isUserNearBottom() {
-  // If the user has scrolled up, don't force the chat back to the bottom.
-  const distanceFromBottom = chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight;
-  return distanceFromBottom <= 30;
-}
-
 function markdownToHtml(markdown) {
   if (!window.marked || !window.DOMPurify) {
     return escapeHtml(markdown).replace(/\n/g, "<br>");
@@ -382,28 +324,16 @@ function createMessageElement(role, content, options = {}) {
   return article;
 }
 
-function renderMessages() {
+function renderMessages(jumpToBottom = false) {
   const prevScrollTop = chatLog.scrollTop;
-  const prevScrollHeight = chatLog.scrollHeight;
-  const prevClientHeight = chatLog.clientHeight;
-  const shouldStickToBottom = state.autoScroll && Date.now() - lastInteractionAt > 400;
   chatLog.innerHTML = "";
   for (const message of state.messages) {
     chatLog.appendChild(createMessageElement(message.role, message.content));
   }
-  if (shouldStickToBottom) {
+  if (jumpToBottom) {
     scrollChatToBottom();
-    return;
-  }
-
-  // Preserve relative scroll position when re-rendering.
-  try {
-    const prevScrollable = prevScrollHeight - prevClientHeight;
-    const ratio = prevScrollable > 0 ? prevScrollTop / prevScrollable : 0;
-    const nextScrollable = chatLog.scrollHeight - prevClientHeight;
-    chatLog.scrollTop = Math.max(0, ratio * nextScrollable);
-  } catch {
-    // If anything goes wrong, fall back to default browser behavior.
+  } else {
+    chatLog.scrollTop = prevScrollTop;
   }
 }
 
@@ -411,6 +341,7 @@ function appendStreamingMessage() {
   const messageElement = createMessageElement("assistant", "");
   messageElement.id = "streaming-message";
   chatLog.appendChild(messageElement);
+  scrollChatToBottom();
   return messageElement.querySelector(".message-body");
 }
 
@@ -584,7 +515,7 @@ async function sendMessage(messageText) {
   }
 
   state.messages.push({ role: "user", content: trimmed });
-  renderMessages();
+  renderMessages(true);
   saveMessagesToStorage();
   setSending(true);
   setStatus(`Streaming from ${state.model}...`);
