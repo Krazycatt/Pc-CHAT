@@ -4,7 +4,7 @@ const THEME_STORAGE_KEY = "nathan-pc-theme";
 const UNLOCK_STORAGE_KEY = "nathan-pc-unlocked";
 const STYLE_STORAGE_KEY = "nathan-pc-style";
 const DEFAULT_THEME = "current";
-const AVAILABLE_THEMES = new Set(["current", "spacy", "liquid-glass", "neon-riot", "volcanic", "midnight-terminal", "candy-pop"]);
+const AVAILABLE_THEMES = new Set(["current", "spacy", "liquid-glass", "neon-riot", "volcanic", "midnight-terminal", "candy-pop", "chatgpt", "claude", "gemini"]);
 const APP_PASSWORD = "Max";
 const STYLE_PROMPTS = {
   helpful: "You are Nathan's PC, a helpful assistant running through LM Studio on Nathan's computer. Keep your answers practical, friendly, and concise unless the user asks for more depth.",
