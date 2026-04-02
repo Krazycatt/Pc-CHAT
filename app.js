@@ -3,6 +3,7 @@ const FALLBACK_MODEL = "openai/gpt-oss-20b";
 const THEME_STORAGE_KEY = "nathan-pc-theme";
 const UNLOCK_STORAGE_KEY = "nathan-pc-unlocked";
 const STYLE_STORAGE_KEY = "nathan-pc-style";
+const REASONING_STORAGE_KEY = "nathan-pc-reasoning";
 const DEFAULT_THEME = "current";
 const AVAILABLE_THEMES = new Set(["current", "spacy", "liquid-glass", "neon-riot", "volcanic", "midnight-terminal", "candy-pop", "chatgpt", "claude", "gemini", "grok"]);
 const PASSWORD_TO_PROFILE = {
@@ -25,6 +26,13 @@ const STYLE_PROMPTS = {
   coder: "You are Nathan's PC, a coding-focused assistant running through LM Studio on Nathan's computer. Prioritize debugging, implementation details, code examples, and practical developer guidance.",
 };
 const DEFAULT_STYLE = "helpful";
+const DEFAULT_REASONING = "off";
+const REASONING_SYSTEM_ADDITIONS = {
+  off: "",
+  low: " Before answering, take a brief moment to think — one or two sentences of internal reasoning is enough.",
+  medium: " Think step by step before answering. Work through the problem methodically, then give your answer.",
+  high: " Think very deeply and carefully before answering. Consider multiple angles, potential edge cases, and alternative interpretations. Reason through the problem thoroughly before giving your final answer.",
+};
 const MAX_STORED_MESSAGES = 60; // cap storage to avoid growing forever
 
 const state = {
@@ -44,6 +52,7 @@ const state = {
   conversationId: null,
   conversations: [],
   searchEnabled: false,
+  reasoning: DEFAULT_REASONING,
 };
 
 
@@ -60,6 +69,7 @@ const clearChatButton = document.querySelector("#clear-chat");
 const signOutButton = document.querySelector("#sign-out");
 const newChatButton = document.querySelector("#new-chat");
 const searchToggleButton = document.querySelector("#search-toggle");
+const reasoningSelect = document.querySelector("#reasoning-select");
 const promptButtons = document.querySelectorAll(".prompt-chip");
 const unlockForm = document.querySelector("#unlock-form");
 const passwordInput = document.querySelector("#password-input");
@@ -430,9 +440,34 @@ function applyStyle(styleName) {
   }
 }
 
+function loadSavedReasoning() {
+  try {
+    return localStorage.getItem(REASONING_STORAGE_KEY) || DEFAULT_REASONING;
+  } catch (error) {
+    console.error("Unable to read reasoning preference", error);
+    return DEFAULT_REASONING;
+  }
+}
+
+function applyReasoning(level) {
+  const next = Object.hasOwn(REASONING_SYSTEM_ADDITIONS, level) ? level : DEFAULT_REASONING;
+  state.reasoning = next;
+
+  if (reasoningSelect && reasoningSelect.value !== next) {
+    reasoningSelect.value = next;
+  }
+
+  try {
+    localStorage.setItem(REASONING_STORAGE_KEY, next);
+  } catch (error) {
+    console.error("Unable to save reasoning preference", error);
+  }
+}
+
 function getSystemPrompt() {
   const base = STYLE_PROMPTS[state.style] || STYLE_PROMPTS[DEFAULT_STYLE];
-  return `${base}\n\nThe current user is ${state.userName || "Nathan"}. Address requests with that in mind, but keep the assistant identity as Nathan's PC.`;
+  const reasoningNote = REASONING_SYSTEM_ADDITIONS[state.reasoning] || "";
+  return `${base}${reasoningNote}\n\nThe current user is ${state.userName || "Nathan"}. Address requests with that in mind, but keep the assistant identity as Nathan's PC.`;
 }
 
 function applyTheme(themeName) {
@@ -818,6 +853,7 @@ async function sendMessage(messageText) {
       body: JSON.stringify({
         model: state.model,
         stream: true,
+        ...(state.reasoning !== "off" && { reasoning_effort: state.reasoning }),
         messages: [
           { role: "system", content: getSystemPrompt() + searchContext },
           ...state.messages,
@@ -886,6 +922,12 @@ themeSelect.addEventListener("change", () => {
 styleSelect.addEventListener("change", () => {
   applyStyle(styleSelect.value);
 });
+
+if (reasoningSelect) {
+  reasoningSelect.addEventListener("change", () => {
+    applyReasoning(reasoningSelect.value);
+  });
+}
 
 clearChatButton.addEventListener("click", () => {
   state.messages = [
@@ -976,4 +1018,5 @@ renderMessages();
 resizeComposer();
 applyTheme(loadSavedTheme());
 applyStyle(loadSavedStyle());
+applyReasoning(loadSavedReasoning());
 setUnlockState(loadUnlockState());
