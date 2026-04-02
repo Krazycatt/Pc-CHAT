@@ -43,6 +43,7 @@ const state = {
   style: DEFAULT_STYLE,
   conversationId: null,
   conversations: [],
+  searchEnabled: false,
 };
 
 
@@ -58,6 +59,7 @@ const statusText = document.querySelector("#status-text");
 const clearChatButton = document.querySelector("#clear-chat");
 const signOutButton = document.querySelector("#sign-out");
 const newChatButton = document.querySelector("#new-chat");
+const searchToggleButton = document.querySelector("#search-toggle");
 const promptButtons = document.querySelectorAll(".prompt-chip");
 const unlockForm = document.querySelector("#unlock-form");
 const passwordInput = document.querySelector("#password-input");
@@ -546,6 +548,9 @@ function setSending(isSending) {
   sendButton.disabled = isSending;
   modelSelect.disabled = isSending;
   messageInput.disabled = isSending;
+  if (searchToggleButton) {
+    searchToggleButton.disabled = isSending;
+  }
 }
 
 function normalizeContent(content) {
@@ -569,6 +574,80 @@ function normalizeContent(content) {
   }
 
   return "";
+}
+
+async function fetchDDG(encodedQuery) {
+  const target = `https://api.duckduckgo.com/?q=${encodedQuery}&format=json&no_html=1&skip_disambig=1`;
+  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`;
+  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(6000) });
+  if (!res.ok) {
+    return null;
+  }
+  const wrapper = await res.json();
+  const data = JSON.parse(wrapper.contents || "{}");
+  const lines = [];
+  if (data.AbstractText) {
+    lines.push(data.AbstractText);
+    if (data.AbstractURL) {
+      lines.push(`Source: ${data.AbstractURL}`);
+    }
+  }
+  if (data.Answer) {
+    lines.push(`Answer: ${data.Answer}`);
+  }
+  if (data.Definition) {
+    lines.push(`Definition: ${data.Definition}`);
+  }
+  const topics = (data.RelatedTopics || [])
+    .filter(t => t.Text && !t.Topics)
+    .slice(0, 4)
+    .map(t => `- ${t.Text}`);
+  if (topics.length) {
+    lines.push(...topics);
+  }
+  return lines.length ? lines.join("\n") : null;
+}
+
+async function fetchWikipedia(encodedQuery) {
+  const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodedQuery}&format=json&origin=*&srlimit=3&srprop=snippet`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+  if (!res.ok) {
+    return null;
+  }
+  const data = await res.json();
+  const hits = data?.query?.search || [];
+  if (!hits.length) {
+    return null;
+  }
+  return hits
+    .slice(0, 3)
+    .map(h => {
+      const snippet = h.snippet
+        .replace(/<[^>]+>/g, "")
+        .replace(/&quot;/g, '"')
+        .replace(/&amp;/g, "&")
+        .replace(/&#039;/g, "'")
+        .trim();
+      return `${h.title}: ${snippet}`;
+    })
+    .join("\n");
+}
+
+async function performWebSearch(query) {
+  const encoded = encodeURIComponent(query);
+  const [ddgResult, wikiResult] = await Promise.allSettled([
+    fetchDDG(encoded),
+    fetchWikipedia(encoded),
+  ]);
+
+  const parts = [];
+  if (ddgResult.status === "fulfilled" && ddgResult.value) {
+    parts.push(ddgResult.value);
+  }
+  if (wikiResult.status === "fulfilled" && wikiResult.value) {
+    parts.push(wikiResult.value);
+  }
+  return parts.length ? parts.join("\n\n") : null;
 }
 
 async function loadModels() {
@@ -715,6 +794,20 @@ async function sendMessage(messageText) {
   const streamingBody = appendStreamingMessage();
 
   try {
+    let searchContext = "";
+    if (state.searchEnabled) {
+      setStatus("Searching the web...");
+      try {
+        const results = await performWebSearch(trimmed);
+        if (results) {
+          searchContext = `\n\n[Live web search results for: "${trimmed}"]\n${results}\n[End of search results — use these to give an up-to-date, accurate answer.]`;
+        }
+      } catch (searchErr) {
+        console.warn("Web search failed", searchErr);
+      }
+      setStatus(`Streaming from ${state.model}...`);
+    }
+
     const response = await fetch(`${BASE_URL}/chat/completions`, {
       method: "POST",
       headers: {
@@ -726,7 +819,7 @@ async function sendMessage(messageText) {
         model: state.model,
         stream: true,
         messages: [
-          { role: "system", content: getSystemPrompt() },
+          { role: "system", content: getSystemPrompt() + searchContext },
           ...state.messages,
         ],
       }),
@@ -822,6 +915,16 @@ if (newChatButton) {
     renderConversationList();
     setStatus(`Connected to ${state.model}.`);
     messageInput.focus();
+  });
+}
+
+if (searchToggleButton) {
+  searchToggleButton.addEventListener("click", () => {
+    state.searchEnabled = !state.searchEnabled;
+    searchToggleButton.classList.toggle("active", state.searchEnabled);
+    searchToggleButton.title = state.searchEnabled
+      ? "Web search ON — click to turn off"
+      : "Toggle web search — fetches live results before answering";
   });
 }
 
