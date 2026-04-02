@@ -270,6 +270,10 @@ function resizeComposer() {
   messageInput.style.height = `${Math.min(messageInput.scrollHeight, 220)}px`;
 }
 
+function isNearBottom(threshold = 80) {
+  return chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < threshold;
+}
+
 function scrollChatToBottom() {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
@@ -346,7 +350,11 @@ function appendStreamingMessage() {
 }
 
 function updateStreamingMessage(body, content) {
+  const wasNearBottom = isNearBottom();
   renderMessageBody(body, "assistant", content || " ");
+  if (wasNearBottom) {
+    scrollChatToBottom();
+  }
 }
 
 function setSending(isSending) {
