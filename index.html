@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nathan's PC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="lock-screen" class="lock-screen">
+    <div class="lock-card">
+      <p class="eyebrow">Protected Access</p>
+      <h2>Enter password to open Nathan's PC</h2>
+      <p class="lock-copy">This local chat interface is locked until the correct password is entered.</p>
+
+      <form id="unlock-form" class="unlock-form" autocomplete="off">
+        <label class="label" for="password-input">Password</label>
+        <input
+          id="password-input"
+          class="password-input"
+          type="password"
+          placeholder="Enter password"
+          required
+        />
+        <p id="unlock-error" class="unlock-error" aria-live="polite"></p>
+        <button id="unlock-button" type="submit">Unlock</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="app-shell" class="app-shell" aria-hidden="true">
+    <aside class="sidebar">
+      <div>
+        <p class="eyebrow">Local AI Link</p>
+        <h1>Nathan's PC</h1>
+        <p class="sidebar-copy">
+          A simple ChatGPT-style front end pointed at Nathan's LM Studio server.
+        </p>
+      </div>
+
+      <div class="panel stack-gap">
+        <label class="label" for="model-select">Model</label>
+        <select id="model-select" aria-label="Select model">
+          <option>Loading models...</option>
+        </select>
+
+        <label class="label" for="theme-select">Theme</label>
+        <select id="theme-select" aria-label="Select theme">
+          <option value="current">Current Warm</option>
+          <option value="spacy">Spacy Futuristic</option>
+          <option value="liquid-glass">Liquid Glass</option>
+          <option value="neon-riot">Neon Riot</option>
+          <option value="volcanic">Volcanic</option>
+          <option value="midnight-terminal">Midnight Terminal</option>
+          <option value="candy-pop">Candy Pop</option>
+        </select>
+
+        <label class="label" for="style-select">Assistant style</label>
+        <select id="style-select" aria-label="Select assistant style">
+          <option value="helpful">Helpful</option>
+          <option value="funny">Funny</option>
+          <option value="concise">Concise</option>
+          <option value="teacher">Teacher</option>
+          <option value="coder">Coder</option>
+        </select>
+
+        <div class="connection-card">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div>
+            <p class="connection-title">Connected endpoint</p>
+            <p class="connection-url">piratelike-asynchronously-ila.ngrok-free.dev</p>
+          </div>
+        </div>
+
+        <button id="clear-chat" class="secondary-button" type="button">Clear conversation</button>
+      </div>
+
+      <div class="panel stack-gap">
+        <p class="label">Quick prompts</p>
+        <div class="prompt-list">
+          <button class="prompt-chip" type="button" data-prompt="What models are best for coding on this machine?">Coding help</button>
+          <button class="prompt-chip" type="button" data-prompt="Give me a short summary of what this PC can do.">What can you do?</button>
+          <button class="prompt-chip" type="button" data-prompt="Help me debug a JavaScript fetch error.">Debug fetch</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="chat-layout">
+      <header class="chat-header">
+        <div>
+          <p class="eyebrow">Chat Interface</p>
+          <h2>Talk to Nathan's PC</h2>
+        </div>
+        <p id="status-text" class="status-text">Loading models...</p>
+      </header>
+
+      <section id="chat-log" class="chat-log" aria-live="polite"></section>
+
+      <form id="chat-form" class="composer" autocomplete="off">
+        <label class="sr-only" for="message-input">Message Nathan's PC</label>
+        <textarea
+          id="message-input"
+          rows="1"
+          placeholder="Message Nathan's PC..."
+          required
+        ></textarea>
+        <div class="composer-actions">
+          <p class="composer-hint">Enter to send, Shift+Enter for a new line</p>
+          <button id="send-button" type="submit">Send</button>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
