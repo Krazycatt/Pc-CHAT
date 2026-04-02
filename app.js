@@ -43,6 +43,24 @@ const state = {
   autoScroll: true,
 };
 
+const AUTO_SCROLL_RESTORE_MS = 1500;
+let autoScrollRestoreTimer = null;
+let lastInteractionAt = 0;
+
+function markUserInteracting() {
+  // Turn off auto-scroll temporarily so the user can scroll normally.
+  state.autoScroll = false;
+
+  if (autoScrollRestoreTimer) {
+    clearTimeout(autoScrollRestoreTimer);
+  }
+
+  autoScrollRestoreTimer = setTimeout(() => {
+    state.autoScroll = isUserNearBottom();
+    autoScrollRestoreTimer = null;
+  }, AUTO_SCROLL_RESTORE_MS);
+}
+
 const appShell = document.querySelector("#app-shell");
 const chatLog = document.querySelector("#chat-log");
 const chatForm = document.querySelector("#chat-form");
@@ -73,7 +91,10 @@ if (window.marked) {
 
 if (chatLog) {
   chatLog.addEventListener("scroll", () => {
-    state.autoScroll = isUserNearBottom();
+    // While the user is actively interacting, keep auto-scroll off.
+    if (!autoScrollRestoreTimer) {
+      state.autoScroll = isUserNearBottom();
+    }
   });
 
   // Some browsers/embeds can swallow wheel events when the page has `overflow: hidden`.
@@ -81,11 +102,24 @@ if (chatLog) {
   chatLog.addEventListener(
     "wheel",
     (event) => {
+      markUserInteracting();
       event.preventDefault();
       chatLog.scrollTop += event.deltaY;
-      state.autoScroll = isUserNearBottom();
     },
     { passive: false },
+  );
+
+  chatLog.addEventListener("pointerdown", () => markUserInteracting());
+  chatLog.addEventListener(
+    "mousemove",
+    () => {
+      const now = Date.now();
+      if (now - lastInteractionAt > 250) {
+        lastInteractionAt = now;
+        markUserInteracting();
+      }
+    },
+    { passive: true },
   );
 }
 
