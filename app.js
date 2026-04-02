@@ -611,78 +611,132 @@ function normalizeContent(content) {
   return "";
 }
 
-async function fetchDDG(encodedQuery) {
-  const target = `https://api.duckduckgo.com/?q=${encodedQuery}&format=json&no_html=1&skip_disambig=1`;
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(target)}`;
-  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(6000) });
-  if (!res.ok) {
-    return null;
-  }
-  const wrapper = await res.json();
-  const data = JSON.parse(wrapper.contents || "{}");
-  const lines = [];
-  if (data.AbstractText) {
-    lines.push(data.AbstractText);
-    if (data.AbstractURL) {
-      lines.push(`Source: ${data.AbstractURL}`);
-    }
-  }
-  if (data.Answer) {
-    lines.push(`Answer: ${data.Answer}`);
-  }
-  if (data.Definition) {
-    lines.push(`Definition: ${data.Definition}`);
-  }
-  const topics = (data.RelatedTopics || [])
-    .filter(t => t.Text && !t.Topics)
-    .slice(0, 4)
-    .map(t => `- ${t.Text}`);
-  if (topics.length) {
-    lines.push(...topics);
-  }
-  return lines.length ? lines.join("\n") : null;
+function cleanHtml(text) {
+  return (text || "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&#039;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .trim();
 }
 
 async function fetchWikipedia(encodedQuery) {
-  const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodedQuery}&format=json&origin=*&srlimit=3&srprop=snippet`;
+  // Search for matching articles
+  const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodedQuery}&format=json&origin=*&srlimit=4&srprop=snippet`;
+  const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(7000) });
+  if (!searchRes.ok) {
+    return null;
+  }
+  const searchData = await searchRes.json();
+  const hits = searchData?.query?.search || [];
+  if (!hits.length) {
+    return null;
+  }
+
+  // Fetch the full plain-text summary of the top article
+  const topTitle = encodeURIComponent(hits[0].title);
+  let fullSummary = "";
+  try {
+    const summaryRes = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${topTitle}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (summaryRes.ok) {
+      const s = await summaryRes.json();
+      if (s.extract) {
+        fullSummary = `${s.title}\n${s.extract.slice(0, 600)}`;
+      }
+    }
+  } catch { /* non-fatal */ }
+
+  const snippets = hits
+    .slice(0, 4)
+    .map(h => `• ${h.title}: ${cleanHtml(h.snippet)}`)
+    .join("\n");
+
+  return fullSummary ? `${fullSummary}\n\nRelated articles:\n${snippets}` : snippets;
+}
+
+async function fetchReddit(encodedQuery) {
+  const url = `https://www.reddit.com/search.json?q=${encodedQuery}&sort=relevance&limit=6&type=link`;
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(7000),
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) {
+    return null;
+  }
+  const data = await res.json();
+  const posts = (data?.data?.children || []).filter(p => p.data && p.data.title);
+  if (!posts.length) {
+    return null;
+  }
+
+  return posts
+    .slice(0, 5)
+    .map(p => {
+      const d = p.data;
+      const score = d.score > 0 ? ` [${d.score} upvotes]` : "";
+      const body = d.selftext ? ` — ${d.selftext.slice(0, 180).replace(/\n/g, " ")}` : "";
+      return `• [${d.subreddit_name_prefixed}] ${d.title}${score}${body}`;
+    })
+    .join("\n");
+}
+
+async function fetchHackerNews(encodedQuery) {
+  const url = `https://hn.algolia.com/api/v1/search?query=${encodedQuery}&hitsPerPage=5&tags=story`;
   const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
   if (!res.ok) {
     return null;
   }
   const data = await res.json();
-  const hits = data?.query?.search || [];
+  const hits = (data?.hits || []).filter(h => h.title);
   if (!hits.length) {
     return null;
   }
+
   return hits
-    .slice(0, 3)
+    .slice(0, 5)
     .map(h => {
-      const snippet = h.snippet
-        .replace(/<[^>]+>/g, "")
-        .replace(/&quot;/g, '"')
-        .replace(/&amp;/g, "&")
-        .replace(/&#039;/g, "'")
-        .trim();
-      return `${h.title}: ${snippet}`;
+      const pts = h.points ? ` [${h.points} pts]` : "";
+      const url = h.url ? ` — ${h.url}` : "";
+      return `• ${h.title}${pts}${url}`;
     })
     .join("\n");
 }
 
 async function performWebSearch(query) {
   const encoded = encodeURIComponent(query);
-  const [ddgResult, wikiResult] = await Promise.allSettled([
-    fetchDDG(encoded),
+
+  const [wikiResult, redditResult, hnResult] = await Promise.allSettled([
     fetchWikipedia(encoded),
+    fetchReddit(encoded),
+    fetchHackerNews(encoded),
   ]);
 
-  const parts = [];
-  if (ddgResult.status === "fulfilled" && ddgResult.value) {
-    parts.push(ddgResult.value);
-  }
+  const sections = [];
+  const sources = [];
+
   if (wikiResult.status === "fulfilled" && wikiResult.value) {
-    parts.push(wikiResult.value);
+    sections.push(`[WIKIPEDIA]\n${wikiResult.value}`);
+    sources.push("Wikipedia");
   }
-  return parts.length ? parts.join("\n\n") : null;
+  if (redditResult.status === "fulfilled" && redditResult.value) {
+    sections.push(`[REDDIT DISCUSSIONS]\n${redditResult.value}`);
+    sources.push("Reddit");
+  }
+  if (hnResult.status === "fulfilled" && hnResult.value) {
+    sections.push(`[HACKER NEWS]\n${hnResult.value}`);
+    sources.push("HackerNews");
+  }
+
+  if (!sections.length) {
+    return null;
+  }
+
+  return { context: sections.join("\n\n"), sources };
 }
 
 async function loadModels() {
@@ -833,13 +887,38 @@ async function sendMessage(messageText) {
     if (state.searchEnabled) {
       setStatus("Searching the web...");
       try {
-        const results = await performWebSearch(trimmed);
-        if (results) {
-          searchContext = `\n\n[Live web search results for: "${trimmed}"]\n${results}\n[End of search results — use these to give an up-to-date, accurate answer.]`;
+        const searchResult = await performWebSearch(trimmed);
+        if (searchResult) {
+          const sourceList = searchResult.sources.join(", ");
+          setStatus(`Search found results from: ${sourceList}`);
+          searchContext = `
+
+══════════════════════════════════════
+LIVE WEB SEARCH RESULTS
+══════════════════════════════════════
+A real-time web search was performed for the user's message.
+Search query: "${trimmed}"
+Sources searched: ${sourceList}
+
+${searchResult.context}
+
+══════════════════════════════════════
+HOW YOU MUST USE THESE RESULTS:
+- You MUST base your answer on the search results above — they are current, real data from the web.
+- Mention which source(s) (Wikipedia, Reddit, HackerNews) the information comes from.
+- If the search results directly answer the question, lead with that information.
+- If results are only partially relevant, use what applies and say so.
+- Do NOT ignore these results and answer only from training data when search data is available.
+══════════════════════════════════════
+`;
+        } else {
+          setStatus("No search results found — answering from training knowledge.");
         }
       } catch (searchErr) {
         console.warn("Web search failed", searchErr);
+        setStatus("Search failed — answering from training knowledge.");
       }
+      await new Promise(r => setTimeout(r, 600));
       setStatus(`Streaming from ${state.model}...`);
     }
 
