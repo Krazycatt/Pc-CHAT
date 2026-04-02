@@ -6,6 +6,7 @@ const STYLE_STORAGE_KEY = "nathan-pc-style";
 const DEFAULT_THEME = "current";
 const AVAILABLE_THEMES = new Set(["current", "spacy", "liquid-glass", "neon-riot", "volcanic", "midnight-terminal", "candy-pop", "chatgpt", "claude", "gemini"]);
 const APP_PASSWORD = "knox";
+const MESSAGES_STORAGE_KEY = "nathan-pc-messages-v1";
 const STYLE_PROMPTS = {
   helpful: "You are Nathan's PC, a helpful assistant running through LM Studio on Nathan's computer. Keep your answers practical, friendly, and concise unless the user asks for more depth.",
   funny: "You are Nathan's PC, a witty and playful assistant running through LM Studio on Nathan's computer. Be funny in a light, friendly way, but still answer the user's request clearly and helpfully. Do not turn serious topics into jokes.",
@@ -14,6 +15,7 @@ const STYLE_PROMPTS = {
   coder: "You are Nathan's PC, a coding-focused assistant running through LM Studio on Nathan's computer. Prioritize debugging, implementation details, code examples, and practical developer guidance.",
 };
 const DEFAULT_STYLE = "helpful";
+const MAX_STORED_MESSAGES = 60; // cap storage to avoid growing forever
 
 const state = {
   messages: [
@@ -55,6 +57,52 @@ function setStatus(message) {
   statusText.textContent = message;
 }
 
+function sanitizeLoadedMessages(value) {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const cleaned = value
+    .map((message) => {
+      const role = message?.role;
+      const content = typeof message?.content === "string" ? message.content : "";
+      return { role, content };
+    })
+    .filter((message) => (message.role === "user" || message.role === "assistant") && typeof message.content === "string" && message.content.trim().length > 0);
+
+  if (!cleaned.length) {
+    return null;
+  }
+
+  // Keep the most recent messages
+  return cleaned.slice(-MAX_STORED_MESSAGES);
+}
+
+function loadSavedMessages() {
+  try {
+    const raw = localStorage.getItem(MESSAGES_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    return sanitizeLoadedMessages(parsed);
+  } catch (error) {
+    console.error("Unable to load saved chat messages", error);
+    return null;
+  }
+}
+
+function saveMessagesToStorage() {
+  try {
+    const toStore = state.messages.slice(-MAX_STORED_MESSAGES);
+    localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(toStore));
+  } catch (error) {
+    // Storage can fail (private mode, quota, etc). Don't break chat.
+    console.error("Unable to save chat messages", error);
+  }
+}
+
 function loadUnlockState() {
   try {
     return sessionStorage.getItem(UNLOCK_STORAGE_KEY) === "true";
@@ -79,6 +127,13 @@ function setUnlockState(isUnlocked) {
     unlockError.textContent = "";
     passwordInput.value = "";
     loadModels();
+
+    const savedMessages = loadSavedMessages();
+    if (savedMessages) {
+      state.messages = savedMessages;
+      renderMessages();
+    }
+
     messageInput.focus();
   } else {
     passwordInput.focus();
@@ -385,6 +440,7 @@ async function sendMessage(messageText) {
 
   state.messages.push({ role: "user", content: trimmed });
   renderMessages();
+  saveMessagesToStorage();
   setSending(true);
   setStatus(`Streaming from ${state.model}...`);
 
@@ -421,6 +477,7 @@ async function sendMessage(messageText) {
       role: "assistant",
       content: assistantMessage || "Nathan's PC did not return any text.",
     });
+    saveMessagesToStorage();
     setStatus(`Connected to ${state.model}.`);
   } catch (error) {
     console.error(error);
@@ -428,6 +485,7 @@ async function sendMessage(messageText) {
       role: "assistant",
       content: `I hit a connection problem while talking to Nathan's PC.\n\n${error.message || "Unknown error"}`,
     });
+    saveMessagesToStorage();
     setStatus("Connection issue. Check the LM Studio tunnel and try again.");
   } finally {
     document.querySelector("#streaming-message")?.remove();
@@ -473,6 +531,8 @@ clearChatButton.addEventListener("click", () => {
       content: "Fresh session started. Nathan's PC is ready when you are.",
     },
   ];
+
+  saveMessagesToStorage();
   renderMessages();
   setStatus(`Connected to ${state.model}.`);
   messageInput.focus();
