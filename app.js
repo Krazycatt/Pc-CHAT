@@ -50,6 +50,7 @@ let lastInteractionAt = 0;
 function markUserInteracting() {
   // Turn off auto-scroll temporarily so the user can scroll normally.
   state.autoScroll = false;
+  lastInteractionAt = Date.now();
 
   if (autoScrollRestoreTimer) {
     clearTimeout(autoScrollRestoreTimer);
@@ -385,7 +386,7 @@ function renderMessages() {
   const prevScrollTop = chatLog.scrollTop;
   const prevScrollHeight = chatLog.scrollHeight;
   const prevClientHeight = chatLog.clientHeight;
-  const shouldStickToBottom = state.autoScroll;
+  const shouldStickToBottom = state.autoScroll && Date.now() - lastInteractionAt > 400;
   chatLog.innerHTML = "";
   for (const message of state.messages) {
     chatLog.appendChild(createMessageElement(message.role, message.content));
@@ -410,17 +411,11 @@ function appendStreamingMessage() {
   const messageElement = createMessageElement("assistant", "");
   messageElement.id = "streaming-message";
   chatLog.appendChild(messageElement);
-  if (state.autoScroll) {
-    scrollChatToBottom();
-  }
   return messageElement.querySelector(".message-body");
 }
 
 function updateStreamingMessage(body, content) {
   renderMessageBody(body, "assistant", content || " ");
-  if (state.autoScroll) {
-    scrollChatToBottom();
-  }
 }
 
 function setSending(isSending) {
