@@ -4,7 +4,7 @@ const THEME_STORAGE_KEY = "nathan-pc-theme";
 const UNLOCK_STORAGE_KEY = "nathan-pc-unlocked";
 const STYLE_STORAGE_KEY = "nathan-pc-style";
 const DEFAULT_THEME = "current";
-const AVAILABLE_THEMES = new Set(["current", "spacy", "liquid-glass", "neon-riot", "volcanic", "midnight-terminal", "candy-pop", "chatgpt", "claude", "gemini"]);
+const AVAILABLE_THEMES = new Set(["current", "spacy", "liquid-glass", "neon-riot", "volcanic", "midnight-terminal", "candy-pop", "chatgpt", "claude", "gemini", "grok"]);
 const PASSWORD_TO_PROFILE = {
   knox: { id: "nathan", name: "Nathan" },
   max: { id: "lucas", name: "Lucas" },
@@ -40,6 +40,7 @@ const state = {
   theme: DEFAULT_THEME,
   isUnlocked: false,
   style: DEFAULT_STYLE,
+  isAtBottom: true,
 };
 
 const appShell = document.querySelector("#app-shell");
@@ -66,6 +67,12 @@ if (window.marked) {
   window.marked.setOptions({
     breaks: true,
     gfm: true,
+  });
+}
+
+if (chatLog) {
+  chatLog.addEventListener("scroll", () => {
+    state.isAtBottom = isUserNearBottom();
   });
 }
 
@@ -270,6 +277,12 @@ function scrollChatToBottom() {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 
+function isUserNearBottom() {
+  // If the user has scrolled up, don't force the chat back to the bottom.
+  const distanceFromBottom = chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight;
+  return distanceFromBottom <= 120;
+}
+
 function markdownToHtml(markdown) {
   if (!window.marked || !window.DOMPurify) {
     return escapeHtml(markdown).replace(/\n/g, "<br>");
@@ -321,24 +334,31 @@ function createMessageElement(role, content, options = {}) {
 }
 
 function renderMessages() {
+  const shouldStickToBottom = isUserNearBottom();
   chatLog.innerHTML = "";
   for (const message of state.messages) {
     chatLog.appendChild(createMessageElement(message.role, message.content));
   }
-  scrollChatToBottom();
+  if (shouldStickToBottom) {
+    scrollChatToBottom();
+  }
 }
 
 function appendStreamingMessage() {
   const messageElement = createMessageElement("assistant", "");
   messageElement.id = "streaming-message";
   chatLog.appendChild(messageElement);
-  scrollChatToBottom();
+  if (isUserNearBottom()) {
+    scrollChatToBottom();
+  }
   return messageElement.querySelector(".message-body");
 }
 
 function updateStreamingMessage(body, content) {
   renderMessageBody(body, "assistant", content || " ");
-  scrollChatToBottom();
+  if (isUserNearBottom()) {
+    scrollChatToBottom();
+  }
 }
 
 function setSending(isSending) {
