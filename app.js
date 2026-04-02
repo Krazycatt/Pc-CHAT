@@ -148,7 +148,11 @@ function sanitizeLoadedMessages(value) {
     .map((message) => {
       const role = message?.role;
       const content = typeof message?.content === "string" ? message.content : "";
-      return { role, content };
+      const entry = { role, content };
+      if (message?.searchUsed) {
+        entry.searchUsed = true;
+      }
+      return entry;
     })
     .filter((message) => (message.role === "user" || message.role === "assistant") && typeof message.content === "string" && message.content.trim().length > 0);
 
@@ -546,6 +550,14 @@ function createMessageElement(role, content, options = {}) {
   renderMessageBody(body, role, content);
 
   article.append(label, body);
+
+  if (options.searchUsed && role === "assistant") {
+    const badge = document.createElement("div");
+    badge.className = "search-used-badge";
+    badge.textContent = "\uD83D\uDD0D Searched the web";
+    article.appendChild(badge);
+  }
+
   return article;
 }
 
@@ -553,7 +565,7 @@ function renderMessages(jumpToBottom = false) {
   const prevScrollTop = chatLog.scrollTop;
   chatLog.innerHTML = "";
   for (const message of state.messages) {
-    chatLog.appendChild(createMessageElement(message.role, message.content));
+    chatLog.appendChild(createMessageElement(message.role, message.content, { searchUsed: message.searchUsed }));
   }
   if (jumpToBottom) {
     scrollChatToBottom();
@@ -562,8 +574,8 @@ function renderMessages(jumpToBottom = false) {
   }
 }
 
-function appendStreamingMessage() {
-  const messageElement = createMessageElement("assistant", "");
+function appendStreamingMessage(searchUsed = false) {
+  const messageElement = createMessageElement("assistant", "", { searchUsed });
   messageElement.id = "streaming-message";
   chatLog.appendChild(messageElement);
   scrollChatToBottom();
@@ -864,6 +876,26 @@ async function readStreamingChat(response, onContent) {
   return fullContent;
 }
 
+function shouldAutoSearch(query) {
+  const patterns = [
+    /\blook\s+(it|him|her|them|this|that)\s+up\b/i,
+    /\blook\s+up\b/i,
+    /\bsearch\s+(for|the\s+web|online)\b/i,
+    /\bwho\s+is\b/i,
+    /\bwho\s+are\b/i,
+    /\bwhat.s\s+the\s+(latest|newest|current|recent)\b/i,
+    /\blatest\s+(news|update|version|release|feature)\b/i,
+    /\bfind\s+(out|me|info|information)\b/i,
+    /\bhow\s+much\s+(does|is|are|cost)\b/i,
+    /\bprice\s+of\b/i,
+    /\btry\s+again\b/i,
+    /\bcheck\s+(it|online|the\s+web)\b/i,
+    /\bverify\b/i,
+    /\bconfirm\b/i,
+  ];
+  return patterns.some(p => p.test(query));
+}
+
 async function sendMessage(messageText) {
   if (state.isSending) {
     return;
@@ -880,37 +912,22 @@ async function sendMessage(messageText) {
   setSending(true);
   setStatus(`Streaming from ${state.model}...`);
 
-  const streamingBody = appendStreamingMessage();
+  const useSearch = state.searchEnabled || shouldAutoSearch(trimmed);
+  let searchWasUsed = false;
+
+  const streamingBody = appendStreamingMessage(useSearch);
 
   try {
-    let searchContext = "";
-    if (state.searchEnabled) {
+    let searchPayload = null;
+
+    if (useSearch) {
       setStatus("Searching the web...");
       try {
-        const searchResult = await performWebSearch(trimmed);
-        if (searchResult) {
-          const sourceList = searchResult.sources.join(", ");
-          setStatus(`Search found results from: ${sourceList}`);
-          searchContext = `
-
-══════════════════════════════════════
-LIVE WEB SEARCH RESULTS
-══════════════════════════════════════
-A real-time web search was performed for the user's message.
-Search query: "${trimmed}"
-Sources searched: ${sourceList}
-
-${searchResult.context}
-
-══════════════════════════════════════
-HOW YOU MUST USE THESE RESULTS:
-- You MUST base your answer on the search results above — they are current, real data from the web.
-- Mention which source(s) (Wikipedia, Reddit, HackerNews) the information comes from.
-- If the search results directly answer the question, lead with that information.
-- If results are only partially relevant, use what applies and say so.
-- Do NOT ignore these results and answer only from training data when search data is available.
-══════════════════════════════════════
-`;
+        searchPayload = await performWebSearch(trimmed);
+        if (searchPayload) {
+          const sourceList = searchPayload.sources.join(", ");
+          setStatus(`Found results from: ${sourceList} — generating answer...`);
+          searchWasUsed = true;
         } else {
           setStatus("No search results found — answering from training knowledge.");
         }
@@ -918,8 +935,36 @@ HOW YOU MUST USE THESE RESULTS:
         console.warn("Web search failed", searchErr);
         setStatus("Search failed — answering from training knowledge.");
       }
-      await new Promise(r => setTimeout(r, 600));
-      setStatus(`Streaming from ${state.model}...`);
+      await new Promise(r => setTimeout(r, 400));
+    }
+
+    // Build the messages array for the API, stripping any client-side meta fields
+    const cleanHistory = state.messages.map(m => ({ role: m.role, content: m.content }));
+
+    let messagesForAPI;
+    if (searchPayload) {
+      // Inject search results as a conversation turn right before the user's question.
+      // This "RAG sandwich" technique works far better than appending to the system prompt.
+      const priorHistory = cleanHistory.slice(0, -1);
+      const currentQuestion = cleanHistory[cleanHistory.length - 1];
+      messagesForAPI = [
+        { role: "system", content: getSystemPrompt() },
+        ...priorHistory,
+        {
+          role: "user",
+          content: `Before you answer my next message, here are live web search results I just fetched:\n\n${searchPayload.context}\n\nNow please answer using these results:`,
+        },
+        {
+          role: "assistant",
+          content: `Understood. I have current search results from ${searchPayload.sources.join(" and ")}. I will base my answer on this real data, not my training knowledge, and will cite the source for each fact.`,
+        },
+        currentQuestion,
+      ];
+    } else {
+      messagesForAPI = [
+        { role: "system", content: getSystemPrompt() },
+        ...cleanHistory,
+      ];
     }
 
     const response = await fetch(`${BASE_URL}/chat/completions`, {
@@ -933,10 +978,7 @@ HOW YOU MUST USE THESE RESULTS:
         model: state.model,
         stream: true,
         ...(state.reasoning !== "off" && { reasoning_effort: state.reasoning }),
-        messages: [
-          { role: "system", content: getSystemPrompt() + searchContext },
-          ...state.messages,
-        ],
+        messages: messagesForAPI,
       }),
     });
 
@@ -952,6 +994,7 @@ HOW YOU MUST USE THESE RESULTS:
     state.messages.push({
       role: "assistant",
       content: assistantMessage || `${getAssistantDisplayName()} did not return any text.`,
+      ...(searchWasUsed && { searchUsed: true }),
     });
     saveMessagesToStorage();
     autoTitleConversation();
