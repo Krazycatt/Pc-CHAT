@@ -75,6 +75,18 @@ if (chatLog) {
   chatLog.addEventListener("scroll", () => {
     state.autoScroll = isUserNearBottom();
   });
+
+  // Some browsers/embeds can swallow wheel events when the page has `overflow: hidden`.
+  // Forward wheel scrolling into the chat container so the mouse works reliably.
+  chatLog.addEventListener(
+    "wheel",
+    (event) => {
+      event.preventDefault();
+      chatLog.scrollTop += event.deltaY;
+      state.autoScroll = isUserNearBottom();
+    },
+    { passive: false },
+  );
 }
 
 function setStatus(message) {
@@ -282,7 +294,7 @@ function scrollChatToBottom() {
 function isUserNearBottom() {
   // If the user has scrolled up, don't force the chat back to the bottom.
   const distanceFromBottom = chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight;
-  return distanceFromBottom <= 120;
+  return distanceFromBottom <= 30;
 }
 
 function markdownToHtml(markdown) {
