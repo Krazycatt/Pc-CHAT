@@ -40,7 +40,7 @@ const state = {
   theme: DEFAULT_THEME,
   isUnlocked: false,
   style: DEFAULT_STYLE,
-  isAtBottom: true,
+  autoScroll: true,
 };
 
 const appShell = document.querySelector("#app-shell");
@@ -73,7 +73,7 @@ if (window.marked) {
 
 if (chatLog) {
   chatLog.addEventListener("scroll", () => {
-    state.isAtBottom = isUserNearBottom();
+    state.autoScroll = isUserNearBottom();
   });
 }
 
@@ -336,13 +336,27 @@ function createMessageElement(role, content, options = {}) {
 }
 
 function renderMessages() {
-  const shouldStickToBottom = isUserNearBottom();
+  const prevScrollTop = chatLog.scrollTop;
+  const prevScrollHeight = chatLog.scrollHeight;
+  const prevClientHeight = chatLog.clientHeight;
+  const shouldStickToBottom = state.autoScroll;
   chatLog.innerHTML = "";
   for (const message of state.messages) {
     chatLog.appendChild(createMessageElement(message.role, message.content));
   }
   if (shouldStickToBottom) {
     scrollChatToBottom();
+    return;
+  }
+
+  // Preserve relative scroll position when re-rendering.
+  try {
+    const prevScrollable = prevScrollHeight - prevClientHeight;
+    const ratio = prevScrollable > 0 ? prevScrollTop / prevScrollable : 0;
+    const nextScrollable = chatLog.scrollHeight - prevClientHeight;
+    chatLog.scrollTop = Math.max(0, ratio * nextScrollable);
+  } catch {
+    // If anything goes wrong, fall back to default browser behavior.
   }
 }
 
@@ -350,7 +364,7 @@ function appendStreamingMessage() {
   const messageElement = createMessageElement("assistant", "");
   messageElement.id = "streaming-message";
   chatLog.appendChild(messageElement);
-  if (isUserNearBottom()) {
+  if (state.autoScroll) {
     scrollChatToBottom();
   }
   return messageElement.querySelector(".message-body");
@@ -358,7 +372,7 @@ function appendStreamingMessage() {
 
 function updateStreamingMessage(body, content) {
   renderMessageBody(body, "assistant", content || " ");
-  if (isUserNearBottom()) {
+  if (state.autoScroll) {
     scrollChatToBottom();
   }
 }
