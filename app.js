@@ -28,7 +28,7 @@ const MAX_STORED_MESSAGES = 60; // cap storage to avoid growing forever
 
 const state = {
   profileId: DEFAULT_PROFILE_ID,
-  profileName: PROFILE_ID_TO_INFO[DEFAULT_PROFILE_ID]?.name || "Nathan",
+  userName: PROFILE_ID_TO_INFO[DEFAULT_PROFILE_ID]?.name || "Nathan",
   messages: [
     {
       role: "assistant",
@@ -61,6 +61,7 @@ const assistantTitle = document.querySelector("#assistant-title");
 const assistantSubtitle = document.querySelector("#assistant-subtitle");
 const chatTitle = document.querySelector("#chat-title");
 const messageLabel = document.querySelector("#message-label");
+const userBadge = document.querySelector("#user-badge");
 
 if (window.marked) {
   window.marked.setOptions({
@@ -74,8 +75,7 @@ function setStatus(message) {
 }
 
 function getAssistantDisplayName() {
-  const name = state.profileName || "Nathan";
-  return `${name}'s PC`;
+  return "Nathan's PC";
 }
 
 function getMessagesStorageKey(profileId) {
@@ -95,23 +95,26 @@ function applyProfile(profileId) {
   const profileInfo = PROFILE_ID_TO_INFO[profileId] || PROFILE_ID_TO_INFO[DEFAULT_PROFILE_ID];
 
   state.profileId = profileInfo.id;
-  state.profileName = profileInfo.name;
+  state.userName = profileInfo.name;
 
-  document.title = `${state.profileName}'s PC`;
+  document.title = getAssistantDisplayName();
   if (assistantTitle) {
     assistantTitle.textContent = getAssistantDisplayName();
   }
   if (assistantSubtitle) {
-    assistantSubtitle.textContent = `A simple ChatGPT-style front end pointed at ${state.profileName}'s LM Studio server.`;
+    assistantSubtitle.textContent = "A simple ChatGPT-style front end pointed at Nathan's LM Studio server.";
   }
   if (chatTitle) {
-    chatTitle.textContent = `Talk to ${state.profileName}'s PC`;
+    chatTitle.textContent = `Talk to ${getAssistantDisplayName()}`;
   }
   if (messageLabel) {
-    messageLabel.textContent = `Message ${state.profileName}'s PC`;
+    messageLabel.textContent = `Message ${getAssistantDisplayName()}`;
   }
   if (messageInput) {
-    messageInput.placeholder = `Message ${state.profileName}'s PC...`;
+    messageInput.placeholder = `Message ${getAssistantDisplayName()}...`;
+  }
+  if (userBadge) {
+    userBadge.textContent = `Signed in as ${state.userName}`;
   }
 }
 
@@ -195,7 +198,7 @@ function setUnlockState(isUnlocked) {
       [
         {
           role: "assistant",
-          content: `${state.profileName}'s PC is online. Ask me anything about code, writing, or what this machine can help with.`,
+          content: `${getAssistantDisplayName()} is online. Ask me anything about code, writing, or what this machine can help with.`,
         },
       ];
     renderMessages();
@@ -241,8 +244,7 @@ function applyStyle(styleName) {
 
 function getSystemPrompt() {
   const base = STYLE_PROMPTS[state.style] || STYLE_PROMPTS[DEFAULT_STYLE];
-  // Swap "Nathan" -> current profile name in the system prompt.
-  return base.replaceAll("Nathan", state.profileName || "Nathan");
+  return `${base}\n\nThe current user is ${state.userName || "Nathan"}. Address requests with that in mind, but keep the assistant identity as Nathan's PC.`;
 }
 
 function applyTheme(themeName) {
@@ -311,7 +313,7 @@ function createMessageElement(role, content, options = {}) {
 
   const label = document.createElement("span");
   label.className = "message-label";
-  label.textContent = role === "assistant" ? getAssistantDisplayName() : "You";
+  label.textContent = role === "assistant" ? getAssistantDisplayName() : state.userName;
 
   const body = document.createElement("div");
   renderMessageBody(body, role, content);

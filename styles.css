@@ -521,7 +521,9 @@ body[data-locked="false"] .lock-screen {
 
 h1,
 h2,
-.sidebar-copy {
+.sidebar-copy,
+.user-greeting,
+.user-badge {
   margin: 0;
 }
 
@@ -536,6 +538,21 @@ h2 {
   max-width: 24ch;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.user-greeting {
+  margin-top: 14px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.user-badge {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.95rem;
 }
 
 .panel {
