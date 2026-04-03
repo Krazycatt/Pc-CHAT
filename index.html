@@ -32,7 +32,10 @@
   </div>
 
   <div id="app-shell" class="app-shell" aria-hidden="true">
-    <aside class="sidebar">
+    <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Toggle sidebar">
+      <span></span><span></span><span></span>
+    </button>
+    <aside class="sidebar" id="sidebar">
       <div>
         <p class="eyebrow">Local AI Link</p>
         <h1 id="assistant-title">Nathan's PC</h1>
@@ -73,13 +76,10 @@
           <option value="coder">Coder</option>
         </select>
 
-        <label class="label" for="reasoning-select">Reasoning effort</label>
-        <select id="reasoning-select" aria-label="Select reasoning effort">
-          <option value="off">Off — just answer</option>
-          <option value="low">Low — quick think</option>
-          <option value="medium">Medium — step by step</option>
-          <option value="high">High — deep analysis</option>
-        </select>
+        <button id="pro-toggle" class="pro-toggle" type="button" title="PRO mode OFF — standard responses">
+          <span class="pro-toggle-label">PRO</span>
+          <span class="pro-toggle-desc">Deep multi-agent reasoning</span>
+        </button>
 
         <div class="connection-card">
           <span class="status-dot" aria-hidden="true"></span>
@@ -121,6 +121,7 @@
       </header>
 
       <section id="chat-log" class="chat-log" aria-live="polite"></section>
+      <button id="scroll-bottom" class="scroll-bottom-btn" type="button" aria-label="Scroll to bottom">&darr;</button>
 
       <form id="chat-form" class="composer" autocomplete="off">
         <label id="message-label" class="sr-only" for="message-input">Message Nathan's PC</label>
@@ -133,7 +134,6 @@
         <div class="composer-actions">
           <p class="composer-hint">Enter to send, Shift+Enter for a new line</p>
           <div class="composer-right">
-            <button id="search-toggle" class="search-toggle-button" type="button" title="Toggle web search — fetches live results before answering">&#128269; Web Search</button>
             <button id="send-button" type="submit">Send</button>
           </div>
         </div>
@@ -143,6 +143,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
-  <script src="app.js?v=freescroll2"></script>
+  <script src="app.js?v=search2"></script>
 </body>
 </html>

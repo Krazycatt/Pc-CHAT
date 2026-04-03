@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(json|md|txt|config|env\\)$\")",
+      "Bash(node -c app.js)"
+    ]
+  }
+}
