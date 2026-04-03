@@ -4,6 +4,7 @@ const THEME_STORAGE_KEY = "nathan-pc-theme";
 const UNLOCK_STORAGE_KEY = "nathan-pc-unlocked";
 const STYLE_STORAGE_KEY = "nathan-pc-style";
 const PRO_STORAGE_KEY = "nathan-pc-pro";
+const TURBO_STORAGE_KEY = "nathan-pc-turbo";
 const DEFAULT_THEME = "current";
 const AVAILABLE_THEMES = new Set(["current", "spacy", "liquid-glass", "neon-riot", "volcanic", "midnight-terminal", "candy-pop", "chatgpt", "claude", "gemini", "grok"]);
 const PASSWORD_TO_PROFILE = {
@@ -101,6 +102,7 @@ const AGENT_ICONS = {
   pro: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.5 1L3 9h4.5L7 15l6-8H8.5L9 1z" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   reflect: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1.5 8a6.5 6.5 0 0111.3-4.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M14.5 8a6.5 6.5 0 01-11.3 4.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M12.8 1v2.6h-2.6M3.2 15v-2.6h2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   synthesis: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="4" cy="4" r="2" stroke="currentColor" stroke-width="1.3"/><circle cx="12" cy="4" r="2" stroke="currentColor" stroke-width="1.3"/><circle cx="4" cy="12" r="2" stroke="currentColor" stroke-width="1.3"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M6 4h4M6 12h4M4 6v4M12 6v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  turbo: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 1l2 5h4l-3.5 3 1.5 5L8 11l-4 3 1.5-5L2 6h4l2-5z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 };
 
 const AGENT_UI = {
@@ -112,6 +114,7 @@ const AGENT_UI = {
   pro:        { id: "pro",        name: "PRO",        icon: AGENT_ICONS.pro,         description: "Deep multi-agent reasoning", color: "#ff6b2c" },
   reflect:    { id: "reflect",    name: "Reflecting",  icon: AGENT_ICONS.reflect,    description: "Evaluating completeness", color: "#59e1ff" },
   synthesis:  { id: "synthesis",  name: "Synthesising", icon: AGENT_ICONS.synthesis, description: "Merging perspectives", color: "#ffd15e" },
+  turbo:      { id: "turbo",      name: "TURBO",        icon: AGENT_ICONS.turbo,     description: "Direct fast response", color: "#00c2ff" },
 };
 
 const STYLE_PROMPTS = {
@@ -232,6 +235,7 @@ const state = {
   conversationId: null,
   conversations: [],
   proMode: false,
+  turboMode: false,
   _activeAgent: null,
 };
 
@@ -251,6 +255,7 @@ const clearChatButton = document.querySelector("#clear-chat");
 const signOutButton = document.querySelector("#sign-out");
 const newChatButton = document.querySelector("#new-chat");
 const proToggle = document.querySelector("#pro-toggle");
+const turboToggle = document.querySelector("#turbo-toggle");
 const promptButtons = document.querySelectorAll(".prompt-chip");
 const unlockForm = document.querySelector("#unlock-form");
 const passwordInput = document.querySelector("#password-input");
@@ -658,6 +663,9 @@ function loadSavedProMode() {
 
 function applyProMode(enabled) {
   state.proMode = !!enabled;
+  if (enabled && state.turboMode) {
+    applyTurboMode(false);
+  }
   if (proToggle) {
     proToggle.classList.toggle("active", state.proMode);
     proToggle.title = state.proMode ? "PRO mode ON — deep multi-agent reasoning" : "PRO mode OFF — standard responses";
@@ -666,6 +674,31 @@ function applyProMode(enabled) {
     localStorage.setItem(PRO_STORAGE_KEY, String(state.proMode));
   } catch (error) {
     console.error("Unable to save PRO mode preference", error);
+  }
+}
+
+function loadSavedTurboMode() {
+  try {
+    return localStorage.getItem(TURBO_STORAGE_KEY) === "true";
+  } catch (error) {
+    console.error("Unable to read TURBO mode preference", error);
+    return false;
+  }
+}
+
+function applyTurboMode(enabled) {
+  state.turboMode = !!enabled;
+  if (enabled && state.proMode) {
+    applyProMode(false);
+  }
+  if (turboToggle) {
+    turboToggle.classList.toggle("active", state.turboMode);
+    turboToggle.title = state.turboMode ? "TURBO mode ON — fast direct responses" : "TURBO mode OFF";
+  }
+  try {
+    localStorage.setItem(TURBO_STORAGE_KEY, String(state.turboMode));
+  } catch (error) {
+    console.error("Unable to save TURBO mode preference", error);
   }
 }
 
@@ -1470,6 +1503,89 @@ async function sendMessage(messageText) {
 
   chatLog.appendChild(streamEl);
   scrollChatToBottom();
+
+  // ═══════════════════════════════════════════════
+  // TURBO MODE — skip everything, go straight to LLM
+  // ═══════════════════════════════════════════════
+  if (state.turboMode) {
+    if (thinkingCard) {
+      updateToolCallCard(thinkingCard, "Turbo — direct response", "Skipping agents for maximum speed.");
+    }
+    setStatus("TURBO: streaming...");
+
+    try {
+      const cleanHistory = state.messages.map(m => ({ role: m.role, content: m.content }));
+      const messagesForAPI = [
+        { role: "system", content: getSystemPrompt([]) },
+        ...cleanHistory,
+      ];
+
+      const response = await fetch(`${BASE_URL}/chat/completions`, {
+        method: "POST",
+        signal: currentAbortController.signal,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer lmstudio",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({
+          model: state.model,
+          stream: true,
+          messages: messagesForAPI,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Chat request failed with ${response.status}`);
+      }
+
+      let assistantMessage = await readStreamingChat(response, (partialContent) => {
+        updateStreamingMessage(msgBody, stripControlTokens(partialContent));
+      });
+
+      assistantMessage = stripControlTokens(assistantMessage);
+
+      state.messages.push({
+        role: "assistant",
+        content: assistantMessage || `${getAssistantDisplayName()} did not return any text.`,
+        agent: "turbo",
+      });
+      saveMessagesToStorage();
+      autoTitleConversation();
+      setStatus(`Connected to ${state.model}.`);
+    } catch (error) {
+      if (error.name === "AbortError") {
+        const partial = msgBody?.textContent?.trim();
+        if (partial && partial !== "") {
+          state.messages.push({ role: "assistant", content: partial, agent: "turbo" });
+          saveMessagesToStorage();
+        }
+        setStatus("Response stopped.");
+      } else {
+        console.error(error);
+        state.messages.push({
+          role: "assistant",
+          content: `I hit a connection problem while talking to ${getAssistantDisplayName()}.\n\n${error.message || "Unknown error"}`,
+        });
+        saveMessagesToStorage();
+        setStatus("Connection issue. Check the LM Studio tunnel and try again.");
+      }
+    } finally {
+      state._activeAgent = null;
+      currentAbortController = null;
+      document.querySelector("#streaming-message")?.remove();
+      renderMessages();
+      renderConversationList();
+      setSending(false);
+      messageInput.focus();
+    }
+    return;
+  }
+
+  // ═══════════════════════════════════════════════
+  // STANDARD / PRO MODE — full agent pipeline
+  // ═══════════════════════════════════════════════
   setStatus(state.proMode ? "PRO: planning approach..." : "Thinking...");
 
   let allAgents = [];
@@ -1763,6 +1879,12 @@ if (proToggle) {
   });
 }
 
+if (turboToggle) {
+  turboToggle.addEventListener("click", () => {
+    applyTurboMode(!state.turboMode);
+  });
+}
+
 clearChatButton.addEventListener("click", () => {
   state.messages = [
     {
@@ -1860,4 +1982,5 @@ resizeComposer();
 applyTheme(loadSavedTheme());
 applyStyle(loadSavedStyle());
 applyProMode(loadSavedProMode());
+applyTurboMode(loadSavedTurboMode());
 setUnlockState(loadUnlockState());
