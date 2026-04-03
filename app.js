@@ -345,6 +345,11 @@ function sanitizeLoadedMessages(value) {
       if (Array.isArray(message?.agents)) {
         entry.agents = message.agents.filter(id => typeof id === "string");
       }
+      if (Array.isArray(message?.thinkingInfo)) {
+        entry.thinkingInfo = message.thinkingInfo.filter(
+          item => item && typeof item.agentId === "string" && typeof item.status === "string"
+        );
+      }
       return entry;
     })
     .filter((message) => (message.role === "user" || message.role === "assistant") && typeof message.content === "string" && message.content.trim().length > 0);
@@ -771,13 +776,29 @@ function createMessageElement(role, content, options = {}) {
 
   article.append(label);
 
-  // Show tool-call cards for agent-produced messages
-  if (role === "assistant") {
+  if (role === "assistant" && Array.isArray(options.thinkingInfo) && options.thinkingInfo.length) {
+    for (const info of options.thinkingInfo) {
+      if (info.agentId && AGENT_UI[info.agentId]) {
+        const card = createToolCallCard(info.agentId, info.status);
+        if (card) {
+          card.classList.add("done");
+          if (info.detail) {
+            const body = card.querySelector(".tool-call-body");
+            if (body) {
+              body.textContent = info.detail;
+              card.classList.add("has-detail");
+            }
+          }
+          article.appendChild(card);
+        }
+      }
+    }
+  } else if (role === "assistant") {
     const agentIds = options.agents || (options.agent ? [options.agent] : []);
     for (const agentId of agentIds) {
       if (agentId && AGENT_UI[agentId]) {
-        const info = AGENT_UI[agentId];
-        const card = createToolCallCard(agentId, `Used ${info.name}`);
+        const uiInfo = AGENT_UI[agentId];
+        const card = createToolCallCard(agentId, `Used ${uiInfo.name}`);
         if (card) {
           card.classList.add("done");
           article.appendChild(card);
@@ -795,7 +816,7 @@ function renderMessages(jumpToBottom = false) {
   const prevScrollTop = chatLog.scrollTop;
   chatLog.innerHTML = "";
   for (const message of state.messages) {
-    chatLog.appendChild(createMessageElement(message.role, message.content, { agent: message.agent, agents: message.agents }));
+    chatLog.appendChild(createMessageElement(message.role, message.content, { agent: message.agent, agents: message.agents, thinkingInfo: message.thinkingInfo }));
   }
   if (jumpToBottom) {
     scrollChatToBottom();
@@ -810,6 +831,7 @@ function createToolCallCard(agentId, statusText) {
 
   const card = document.createElement("div");
   card.className = "tool-call-card";
+  card.dataset.agentId = agentId;
   card.style.setProperty("--agent-color", info.color);
 
   const header = document.createElement("button");
@@ -1390,7 +1412,21 @@ async function routeMessage(query, isPro) {
   }
 }
 
-// ── Helper: insert a tool-call card above the message body ──
+function extractThinkingInfo(streamEl) {
+  if (!streamEl) return [];
+  const cards = streamEl.querySelectorAll(".tool-call-card[data-agent-id]");
+  const result = [];
+  for (const card of cards) {
+    const agentId = card.dataset.agentId;
+    const status = card.querySelector(".tool-call-status")?.textContent || "";
+    const detail = card.querySelector(".tool-call-body")?.textContent || "";
+    if (agentId) {
+      result.push({ agentId, status, ...(detail && { detail }) });
+    }
+  }
+  return result;
+}
+
 function insertCard(streamEl, msgBody, agentId, statusText) {
   const card = createToolCallCard(agentId, statusText);
   if (card) {
@@ -1678,11 +1714,13 @@ async function sendMessage(messageText) {
     }
 
     const agentTag = uniqueAgents.length === 1 ? uniqueAgents[0] : uniqueAgents.length > 1 ? "pro" : null;
+    const thinkingInfo = extractThinkingInfo(streamEl);
     state.messages.push({
       role: "assistant",
       content: assistantMessage || `${getAssistantDisplayName()} did not return any text.`,
       ...(agentTag && { agent: agentTag }),
       ...(uniqueAgents.length > 1 && { agents: uniqueAgents }),
+      ...(thinkingInfo.length > 0 && { thinkingInfo }),
     });
     saveMessagesToStorage();
     autoTitleConversation();
@@ -1692,7 +1730,13 @@ async function sendMessage(messageText) {
       const partial = msgBody?.textContent?.trim();
       if (partial && partial !== "") {
         const agentTag = allAgents.length === 1 ? allAgents[0] : allAgents.length > 1 ? "pro" : null;
-        state.messages.push({ role: "assistant", content: partial, ...(agentTag && { agent: agentTag }) });
+        const thinkingInfo = extractThinkingInfo(streamEl);
+        state.messages.push({
+          role: "assistant",
+          content: partial,
+          ...(agentTag && { agent: agentTag }),
+          ...(thinkingInfo.length > 0 && { thinkingInfo }),
+        });
         saveMessagesToStorage();
       }
       setStatus("Response stopped.");
