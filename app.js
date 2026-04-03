@@ -22,7 +22,7 @@ const CORE_SYSTEM_PROMPT = `\
 ═══════════════════════════════════════════════
 IDENTITY
 ═══════════════════════════════════════════════
-You are Nathan's PC — a local AI assistant running through LM Studio on Nathan's computer.
+You are Nathan’s PC — a local AI assistant running through LM Studio on Nathan’s computer.
 You are direct, honest, and intellectually rigorous. You prioritise accuracy above all else.
 
 ═══════════════════════════════════════════════
@@ -30,13 +30,13 @@ ANTI-HALLUCINATION RULES  ← HIGHEST PRIORITY
 ═══════════════════════════════════════════════
 1. NEVER fabricate facts, figures, names, product specs, dates, prices, URLs, or citations.
 2. If you are not CERTAIN something is true, say so clearly. Use phrases like:
-   - "I'm not certain, but…"
+   - "I’m not certain, but…"
    - "As of my training data… though this may have changed."
-   - "I don't have reliable information on this."
+   - "I don’t have reliable information on this."
    NEVER present uncertain information as definite fact.
-3. If the user asks about something recent, fast-changing, or time-sensitive (e.g. product specs, software versions, current events, prices, people's roles), treat your training data as UNRELIABLE and say so.
+3. If the user asks about something recent, fast-changing, or time-sensitive (e.g. product specs, software versions, current events, prices, people’s roles), treat your training data as UNRELIABLE and say so.
 4. Do NOT invent plausible-sounding sources. Only cite a source if you genuinely know it exists. If web search results are provided, cite those sources — nothing else.
-5. It is ALWAYS better to say "I don't know" or "I'm not sure" than to guess and present it as fact.
+5. It is ALWAYS better to say "I don’t know" or "I’m not sure" than to guess and present it as fact.
 
 ═══════════════════════════════════════════════
 HONESTY & PUSHBACK
@@ -48,91 +48,40 @@ HONESTY & PUSHBACK
 10. Never change a factual answer simply because the user expresses displeasure.
 
 ═══════════════════════════════════════════════
-AGENT SYSTEM (automatic)
+OUTPUT FORMAT
 ═══════════════════════════════════════════════
-You have specialised sub-agents that are automatically dispatched based on the user's message.
-You do NOT choose when to use them — the system detects intent and activates the right agent.
-When an agent is active, you will see an ACTIVE AGENT block below. Follow its rules precisely.
+11. Your output goes DIRECTLY to the user as readable text. Use Markdown formatting.
+12. NEVER output JSON, XML, special tokens, function calls, or machine-readable formats.
+13. NEVER output <|channel|>, <|constrain|>, <|message|>, or similar control markup.
+14. You are NOT an orchestrator or router. You are the final responder. Just write your answer.
 
-Available agents (auto-dispatched):
-• [RESEARCHER] — auto-triggered for factual lookups, current events, prices, "who is", "latest"
-• [CODER] — auto-triggered for code requests, debugging, programming questions
-• [WRITER] — auto-triggered for drafting emails, essays, editing text
-• [ANALYST] — auto-triggered for comparisons, decisions, pros/cons, strategy
-
-If NO agent was activated but you believe one would help, say so briefly:
-"I could give a better answer with live data — try asking something like 'search for…' to trigger the Researcher."
-Keep such suggestions to ONE sentence. Do not over-suggest.
+═══════════════════════════════════════════════
+SEARCH RESULTS
+═══════════════════════════════════════════════
+15. If web search results appear below, the system already searched the web for you. Use that data to answer.
+16. Cite sources from the search results inline. Do not invent sources that were not provided.
+17. If the search data is thin or missing, say so honestly.
 
 ═══════════════════════════════════════════════
 GENERAL BEHAVIOUR
 ═══════════════════════════════════════════════
-11. Be concise unless asked for depth. Avoid filler phrases like "Certainly!", "Great question!", or "Of course!".
-12. When you're wrong, admit it immediately and directly. Don't deflect.
-13. Format responses clearly — use tables, bullet points, or code blocks when they aid readability.
+18. Be concise unless asked for depth. Avoid filler phrases like "Certainly!", "Great question!", or "Of course!".
+19. When you’re wrong, admit it immediately and directly. Don’t deflect.
+20. Format responses clearly — use tables, bullet points, or code blocks when they aid readability.
 ═══════════════════════════════════════════════`;
 
 const AGENT_PROMPTS = {
   researcher: `\
-═══════════════════════════════════════════════
-ACTIVE AGENT: RESEARCHER
-═══════════════════════════════════════════════
-Live web search results have been injected from multiple sources: DuckDuckGo (general web), Wikipedia (encyclopedic), Reddit (community), and HackerNews (tech).
-YOUR RULES IN THIS MODE:
-1. Base ALL factual claims on the provided search results. Do NOT fill gaps with training data unless you clearly label it as such.
-2. Cite every fact inline with the source: (DuckDuckGo), (Wikipedia), (Reddit r/subreddit), (HackerNews).
-3. Structure your answer: **Summary** (2-3 sentences) → **Details** (sourced facts) → **Sources** (list at bottom with URLs when available).
-4. Cross-reference: if DuckDuckGo and Wikipedia both cover a topic, synthesise both for a stronger answer.
-5. If the results are thin or missing key info, say so explicitly: "The search didn't cover X — I'd suggest refining the query."
-6. Resolve conflicting sources by noting both: "Wikipedia says X, but Reddit users report Y."
-7. NEVER hallucinate sources that weren't provided.
-═══════════════════════════════════════════════`,
+When search results are provided below, base your factual claims on them. Cite sources inline like (DuckDuckGo) or (Wikipedia). Structure your answer as: summary first, then details, then a sources list at the bottom with URLs. If results are thin, say so. Never invent sources.`,
 
   coder: `\
-═══════════════════════════════════════════════
-ACTIVE AGENT: CODER
-═══════════════════════════════════════════════
-You are in deep code mode. Prioritise working, production-quality code.
-YOUR RULES IN THIS MODE:
-1. Always show complete, runnable code — no pseudocode or "// TODO" placeholders unless the user asks for a skeleton.
-2. For debugging: reproduce the problem statement → identify root cause → show the fix → explain why it works.
-3. For new code: state assumptions → show implementation → explain key decisions → note edge cases.
-4. Use the user's language/framework when specified. If ambiguous, ask or default to the most common choice.
-5. Include error handling for production code. Skip it only for quick demos when the user asks for brevity.
-6. When reviewing code, be direct: "This will break because…" not "You might want to consider…"
-7. For architecture questions, use diagrams (ASCII or markdown tables) to show component relationships.
-═══════════════════════════════════════════════`,
+Prioritise working, production-quality code. Show complete runnable code, not pseudocode. For debugging: identify root cause, show the fix, explain why. For new code: state assumptions, show implementation, note edge cases. Be direct about problems.`,
 
   writer: `\
-═══════════════════════════════════════════════
-ACTIVE AGENT: WRITER
-═══════════════════════════════════════════════
-You are in professional writing mode. Produce polished, purposeful text.
-YOUR RULES IN THIS MODE:
-1. Match the user's requested format exactly (email, essay, documentation, creative, etc.).
-2. If no format is specified, ask: "What format are you looking for? (email, blog post, documentation, etc.)"
-3. Write in clear, active voice. Eliminate filler, redundancy, and weasel words.
-4. Structure first: open with the key point, support with evidence/detail, close with action or takeaway.
-5. When editing user text: show the revised version first, then a brief "Changes made" summary below it.
-6. For creative writing: honour the user's tone and voice. Suggest improvements, don't override their style.
-7. For professional docs: be precise, use consistent terminology, and include sections/headers for anything over 200 words.
-═══════════════════════════════════════════════`,
+Produce polished, purposeful text. Match the requested format. Write in clear active voice. Structure: open with key point, support with detail, close with action. For editing: show revised text first, then summarise changes.`,
 
   analyst: `\
-═══════════════════════════════════════════════
-ACTIVE AGENT: ANALYST
-═══════════════════════════════════════════════
-You are in analytical mode. Decompose problems and support decisions with structured reasoning.
-YOUR RULES IN THIS MODE:
-1. Start every response with a problem restatement: "You're asking whether…" or "The core question is…" — confirm you understood.
-2. Break complex problems into components. Use numbered lists or headers for each dimension.
-3. For comparisons: use a table. Columns = options, rows = criteria, cells = ratings or notes.
-4. For decisions: identify criteria → weight them → evaluate options → make a clear recommendation with reasoning.
-5. Call out assumptions explicitly: "This assumes that…" — so the user can challenge them.
-6. Quantify where possible. "Roughly 3x more expensive" beats "significantly more expensive."
-7. End with a clear, actionable recommendation: "Based on this analysis, I'd go with X because…"
-8. If the problem is under-specified, list what's missing before analysing: "To give you a solid answer, I'd need to know…"
-═══════════════════════════════════════════════`,
+Decompose problems with structured reasoning. For comparisons use tables. For decisions: identify criteria, weight them, evaluate, recommend. Call out assumptions. Quantify where possible. End with a clear recommendation.`,
 };
 
 const AGENT_ICONS = {
@@ -229,21 +178,32 @@ Reply with ONLY a JSON object:
 {"structure": "describe the ideal response structure (sections, order, emphasis)", "key_points": ["most important points to cover"], "conflicts": "note any conflicting info between agents that needs resolution"}`;
 
 const PRO_SYNTHESIS_PROMPT = `\
-═══════════════════════════════════════════════
-PROCESSING MODE: PRO (maximum depth)
-═══════════════════════════════════════════════
-You have been given maximum processing resources. ALL specialist agents were consulted.
-YOUR RULES IN PRO MODE:
-1. Think deeply and thoroughly. Consider multiple angles before answering.
-2. Challenge your own assumptions. If you're uncertain, explore both sides.
-3. Structure your response with clear sections and headers.
-4. Cross-reference information from different agent perspectives.
-5. If web search results were provided, treat them as primary sources.
-6. If code is involved, ensure it is complete and production-quality.
-7. If analysis is needed, use structured frameworks (tables, criteria, quantified tradeoffs).
-8. End with a clear, actionable conclusion or recommendation.
-9. This response should be noticeably more thorough than a standard answer.
-═══════════════════════════════════════════════`;
+PRO MODE — give a thorough, high-quality answer:
+- Think deeply. Consider multiple angles before answering.
+- Challenge your own assumptions. Explore both sides if uncertain.
+- Structure your response with clear sections and headers.
+- If web search results were provided, treat them as primary sources.
+- If code is involved, make it complete and production-quality.
+- If analysis is needed, use tables, criteria, and quantified tradeoffs.
+- End with a clear, actionable conclusion or recommendation.`;
+
+const SEARCH_EVAL_PROMPT = `\
+You are evaluating web search results for adequacy. The user asked a question and a web search was performed.
+
+Decide: do the results contain enough information to answer the question well?
+
+Consider:
+- Are the results relevant to what was actually asked?
+- Is there enough factual detail, or are results too vague/tangential?
+- Would a DIFFERENT search query likely find better or missing information?
+
+Reply with ONLY a JSON object:
+{"adequate": true/false, "reason": "brief explanation", "next_query": "a better/different search query to try (only if adequate is false)"}
+
+Be practical — if results are decent but not perfect, mark adequate true.
+Only mark adequate false if results clearly miss the point or lack key information.`;
+
+const MAX_SEARCH_LOOPS = 3;
 
 let currentAbortController = null;
 
@@ -956,6 +916,26 @@ function normalizeContent(content) {
   return "";
 }
 
+/**
+ * Strip leaked control/special tokens that some open-source models emit
+ * when they try to "call agents" or output internal markup.
+ */
+function stripControlTokens(text) {
+  if (!text) return text;
+  return text
+    // <|channel|>, <|constrain|>, <|message|>, <|im_start|>, <|im_end|>, etc.
+    .replace(/<\|[^|>]*\|>/g, "")
+    // XML-style agent/tool directives: <tool_call>, </tool_call>, <function>, etc.
+    .replace(/<\/?(tool_call|function_call|function|tool|command|invoke|action|agent)[^>]*>/gi, "")
+    // Lines that are pure JSON objects (agent dispatch attempts like {"question":"..."})
+    .replace(/^\s*\{"\w+":\s*"[^"]*"\}\s*$/gm, "")
+    // Leftover "commentary to=RESEARCHER" or "to=ANALYST" fragments
+    .replace(/commentary\s+to=\w+/gi, "")
+    // Clean up resulting blank lines
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function cleanHtml(text) {
   return (text || "")
     .replace(/<[^>]+>/g, "")
@@ -971,9 +951,73 @@ function cleanHtml(text) {
 // WEB SEARCH ENGINE
 // ═══════════════════════════════════════════════
 
-async function fetchDuckDuckGo(encodedQuery) {
-  // DuckDuckGo Instant Answer API — free, no key, CORS-enabled
-  // Note: DDG returns content-type application/x-javascript, so we parse via text() not json()
+async function fetchDuckDuckGoSearch(query) {
+  // Actual DuckDuckGo HTML search via CORS proxy — returns real web results
+  const CORS_PROXIES = [
+    (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  ];
+
+  const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+
+  for (const makeProxy of CORS_PROXIES) {
+    try {
+      const res = await fetch(makeProxy(ddgUrl), {
+        signal: AbortSignal.timeout(10000),
+        headers: { Accept: "text/html" },
+      });
+      if (!res.ok) continue;
+      const html = await res.text();
+      if (!html || html.length < 200) continue;
+
+      // Parse with DOMParser for robust HTML extraction
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+
+      const results = [];
+      const resultNodes = doc.querySelectorAll(".result");
+      for (const node of resultNodes) {
+        if (results.length >= 8) break;
+        const linkEl = node.querySelector(".result__a");
+        const snippetEl = node.querySelector(".result__snippet");
+        if (!linkEl) continue;
+
+        const title = (linkEl.textContent || "").trim();
+        const snippet = snippetEl ? (snippetEl.textContent || "").trim() : "";
+
+        // DDG wraps URLs in a redirect — extract the real URL
+        let href = linkEl.getAttribute("href") || "";
+        try {
+          if (href.includes("uddg=")) {
+            const parsed = new URL(href, "https://duckduckgo.com");
+            href = parsed.searchParams.get("uddg") || href;
+          }
+        } catch { /* use raw href */ }
+
+        if (title) {
+          results.push({ title, snippet, url: href });
+        }
+      }
+
+      if (results.length) {
+        return results
+          .map(r => {
+            const snippetLine = r.snippet ? `\n  ${r.snippet}` : "";
+            const urlLine = r.url ? `\n  ${r.url}` : "";
+            return `• ${r.title}${snippetLine}${urlLine}`;
+          })
+          .join("\n\n");
+      }
+    } catch (err) {
+      console.warn("DDG HTML search proxy failed, trying next", err);
+    }
+  }
+  return null;
+}
+
+async function fetchDuckDuckGoInstant(encodedQuery) {
+  // DuckDuckGo Instant Answer API — supplementary knowledge-base lookup
+  // Good for direct answers, Wikipedia abstracts, infoboxes — but NOT a web search engine
   let data;
   try {
     const url = `https://api.duckduckgo.com/?q=${encodedQuery}&format=json&no_html=1&skip_disambig=1`;
@@ -983,28 +1027,25 @@ async function fetchDuckDuckGo(encodedQuery) {
     });
     if (!res.ok) return null;
     const text = await res.text();
-    if (!text || text[0] !== "{") return null; // not JSON
+    if (!text || text[0] !== "{") return null;
     data = JSON.parse(text);
   } catch (err) {
-    console.warn("DDG fetch/parse failed", err);
+    console.warn("DDG instant fetch/parse failed", err);
     return null;
   }
 
   const parts = [];
 
-  // Direct answer (e.g. "How tall is the Eiffel Tower?" → "330 m")
   if (data.Answer) {
     parts.push(`Direct answer: ${data.Answer}`);
   }
 
-  // Abstract — main summary from a source (often Wikipedia, but also other sources)
   if (data.AbstractText) {
     const src = data.AbstractSource ? ` (${data.AbstractSource})` : "";
     const link = data.AbstractURL ? ` — ${data.AbstractURL}` : "";
     parts.push(`${data.AbstractText.slice(0, 800)}${src}${link}`);
   }
 
-  // Infobox — structured data (e.g. for people, companies, places)
   if (data.Infobox?.content?.length) {
     const infoLines = data.Infobox.content
       .slice(0, 8)
@@ -1013,8 +1054,6 @@ async function fetchDuckDuckGo(encodedQuery) {
     parts.push(`Key facts:\n${infoLines}`);
   }
 
-  // Related topics — broader coverage beyond the main article
-  // DDG nests some topics inside { Name, Topics: [...] } groups; flatten them
   const rawTopics = (data.RelatedTopics || []);
   const flatTopics = [];
   for (const t of rawTopics) {
@@ -1032,7 +1071,6 @@ async function fetchDuckDuckGo(encodedQuery) {
     parts.push(`Related:\n${topicLines}`);
   }
 
-  // Results — direct web results (less common but valuable when present)
   const results = (data.Results || []).filter(r => r.Text && r.FirstURL).slice(0, 4);
   if (results.length) {
     const resultLines = results.map(r => `• ${r.Text.slice(0, 200)} — ${r.FirstURL}`).join("\n");
@@ -1080,7 +1118,11 @@ async function fetchReddit(encodedQuery) {
   const url = `https://www.reddit.com/search.json?q=${encodedQuery}&sort=relevance&limit=8&type=link`;
   const res = await fetch(url, {
     signal: AbortSignal.timeout(7000),
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      // Reddit blocks requests without a user-agent or with fetch-like defaults
+      "User-Agent": "NathanPC-Chat/1.0",
+    },
   });
   if (!res.ok) return null;
   const data = await res.json();
@@ -1122,8 +1164,10 @@ async function fetchHackerNews(encodedQuery) {
 async function performWebSearch(query) {
   const encoded = encodeURIComponent(query);
 
-  const [ddgResult, wikiResult, redditResult, hnResult] = await Promise.allSettled([
-    fetchDuckDuckGo(encoded),
+  // Fire all searches in parallel — real DDG search is the primary source
+  const [ddgSearchResult, ddgInstantResult, wikiResult, redditResult, hnResult] = await Promise.allSettled([
+    fetchDuckDuckGoSearch(query),
+    fetchDuckDuckGoInstant(encoded),
     fetchWikipedia(encoded),
     fetchReddit(encoded),
     fetchHackerNews(encoded),
@@ -1132,10 +1176,18 @@ async function performWebSearch(query) {
   const sections = [];
   const sources = [];
 
-  if (ddgResult.status === "fulfilled" && ddgResult.value) {
-    sections.push(`[DUCKDUCKGO — INSTANT ANSWERS & KNOWLEDGE BASE]\n${ddgResult.value}`);
+  // Primary: actual DuckDuckGo web search results (titles, snippets, URLs)
+  if (ddgSearchResult.status === "fulfilled" && ddgSearchResult.value) {
+    sections.push(`[DUCKDUCKGO — WEB SEARCH RESULTS]\n${ddgSearchResult.value}`);
     sources.push("DuckDuckGo");
   }
+
+  // Supplementary: DDG Instant Answer API (knowledge base, direct answers)
+  if (ddgInstantResult.status === "fulfilled" && ddgInstantResult.value) {
+    sections.push(`[DUCKDUCKGO — INSTANT ANSWERS & KNOWLEDGE BASE]\n${ddgInstantResult.value}`);
+    if (!sources.includes("DuckDuckGo")) sources.push("DuckDuckGo");
+  }
+
   if (wikiResult.status === "fulfilled" && wikiResult.value) {
     sections.push(`[WIKIPEDIA — ENCYCLOPEDIC]\n${wikiResult.value}`);
     sources.push("Wikipedia");
@@ -1538,7 +1590,7 @@ async function sendMessage(messageText) {
       const priorHistory = cleanHistory.slice(0, -1);
       const currentQuestion = cleanHistory[cleanHistory.length - 1];
       messagesForAPI = [
-        { role: "system", content: getSystemPrompt(uniqueAgents) + `\n\n═══════════════════════════════════════════════\nRESEARCHER AGENT RESULTS\n═══════════════════════════════════════════════\nYour Researcher sub-agent automatically searched the web and returned the following live data from ${searchPayload.sources.join(", ")}. These are YOUR tools' results, not something the user provided. Base your answer on this data and cite sources inline.\n\n${searchPayload.context}\n═══════════════════════════════════════════════` },
+        { role: "system", content: getSystemPrompt(uniqueAgents) + `\n\nWEB SEARCH RESULTS (use these to answer the user's question — cite sources inline):\nSources searched: ${searchPayload.sources.join(", ")}\n\n${searchPayload.context}` },
         ...priorHistory,
         currentQuestion,
       ];
@@ -1571,9 +1623,59 @@ async function sendMessage(messageText) {
       throw new Error(errorText || `Chat request failed with ${response.status}`);
     }
 
-    const assistantMessage = await readStreamingChat(response, (partialContent) => {
-      updateStreamingMessage(msgBody, partialContent);
+    let assistantMessage = await readStreamingChat(response, (partialContent) => {
+      updateStreamingMessage(msgBody, stripControlTokens(partialContent));
     });
+
+    // Sanitize the final output
+    assistantMessage = stripControlTokens(assistantMessage);
+
+    // ── SYNTHESIS RESCUE: if the model output JSON, garbage, or nothing, retry ──
+    const cleaned = (assistantMessage || "").trim();
+    const looksLikeJSON = cleaned.startsWith("{") || cleaned.startsWith("[");
+    const tooShort = cleaned.length < 10 && searchPayload;
+    if (looksLikeJSON || !cleaned || tooShort) {
+      console.warn("Response was JSON/empty/too short — running synthesis rescue", cleaned.slice(0, 200));
+      setStatus("Reformulating answer...");
+      const synthCard = insertCard(streamEl, msgBody, "synthesis", "Finalising answer...");
+      try {
+        const rescueMessages = [
+          { role: "system", content: "You are a helpful assistant. The user asked a question and web search results were gathered. Write a clear, well-structured Markdown answer for the user. Do NOT output JSON. Do NOT output special tokens. Just write a normal helpful answer." },
+        ];
+        if (searchPayload) {
+          rescueMessages.push({ role: "user", content: `Web search results:\n${searchPayload.context}\n\nUser question: ${trimmed}\n\nWrite a helpful answer using the search results above. Use Markdown formatting.` });
+        } else {
+          rescueMessages.push({ role: "user", content: trimmed });
+        }
+
+        const rescueResponse = await fetch(`${BASE_URL}/chat/completions`, {
+          method: "POST",
+          signal: currentAbortController.signal,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer lmstudio",
+            "ngrok-skip-browser-warning": "true",
+          },
+          body: JSON.stringify({
+            model: state.model,
+            stream: true,
+            messages: rescueMessages,
+          }),
+        });
+
+        if (rescueResponse.ok) {
+          assistantMessage = await readStreamingChat(rescueResponse, (partialContent) => {
+            updateStreamingMessage(msgBody, stripControlTokens(partialContent));
+          });
+          assistantMessage = stripControlTokens(assistantMessage);
+        }
+        if (synthCard) updateToolCallCard(synthCard, "Answer ready", "");
+      } catch (rescueErr) {
+        if (rescueErr.name === "AbortError") throw rescueErr;
+        console.warn("Synthesis rescue failed", rescueErr);
+        if (synthCard) updateToolCallCard(synthCard, "Rescue failed", rescueErr.message);
+      }
+    }
 
     const agentTag = uniqueAgents.length === 1 ? uniqueAgents[0] : uniqueAgents.length > 1 ? "pro" : null;
     state.messages.push({

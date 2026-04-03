@@ -18,7 +18,8 @@
       "Bash(curl -s \"https://www.googleapis.com/customsearch/v1?q=test&cx=dummy&key=dummy\" -I)",
       "Bash(curl -sI \"https://api.search.brave.com/res/v1/web/search?q=test\")",
       "Bash(curl -sI \"https://api.qwant.com/v3/search/web?q=test&count=5&locale=en_US\")",
-      "Bash(curl -s \"https://api.qwant.com/v3/search/web?q=NVIDIA+stock+price&count=5&locale=en_US&offset=0\" -H \"User-Agent: Mozilla/5.0\")"
+      "Bash(curl -s \"https://api.qwant.com/v3/search/web?q=NVIDIA+stock+price&count=5&locale=en_US&offset=0\" -H \"User-Agent: Mozilla/5.0\")",
+      "Bash(where node:*)"
     ]
   }
 }
