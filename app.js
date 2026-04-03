@@ -973,10 +973,22 @@ function cleanHtml(text) {
 
 async function fetchDuckDuckGo(encodedQuery) {
   // DuckDuckGo Instant Answer API — free, no key, CORS-enabled
-  const url = `https://api.duckduckgo.com/?q=${encodedQuery}&format=json&no_html=1&skip_disambig=1`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-  if (!res.ok) return null;
-  const data = await res.json();
+  // Note: DDG returns content-type application/x-javascript, so we parse via text() not json()
+  let data;
+  try {
+    const url = `https://api.duckduckgo.com/?q=${encodedQuery}&format=json&no_html=1&skip_disambig=1`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(8000),
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (!text || text[0] !== "{") return null; // not JSON
+    data = JSON.parse(text);
+  } catch (err) {
+    console.warn("DDG fetch/parse failed", err);
+    return null;
+  }
 
   const parts = [];
 
@@ -1002,9 +1014,19 @@ async function fetchDuckDuckGo(encodedQuery) {
   }
 
   // Related topics — broader coverage beyond the main article
-  const topics = (data.RelatedTopics || [])
-    .filter(t => t.Text && t.FirstURL)
-    .slice(0, 6);
+  // DDG nests some topics inside { Name, Topics: [...] } groups; flatten them
+  const rawTopics = (data.RelatedTopics || []);
+  const flatTopics = [];
+  for (const t of rawTopics) {
+    if (t.Text && t.FirstURL) {
+      flatTopics.push(t);
+    } else if (Array.isArray(t.Topics)) {
+      for (const sub of t.Topics) {
+        if (sub.Text && sub.FirstURL) flatTopics.push(sub);
+      }
+    }
+  }
+  const topics = flatTopics.slice(0, 6);
   if (topics.length) {
     const topicLines = topics.map(t => `• ${t.Text.slice(0, 200)} — ${t.FirstURL}`).join("\n");
     parts.push(`Related:\n${topicLines}`);
@@ -1111,7 +1133,7 @@ async function performWebSearch(query) {
   const sources = [];
 
   if (ddgResult.status === "fulfilled" && ddgResult.value) {
-    sections.push(`[DUCKDUCKGO — GENERAL WEB]\n${ddgResult.value}`);
+    sections.push(`[DUCKDUCKGO — INSTANT ANSWERS & KNOWLEDGE BASE]\n${ddgResult.value}`);
     sources.push("DuckDuckGo");
   }
   if (wikiResult.status === "fulfilled" && wikiResult.value) {
@@ -1516,16 +1538,8 @@ async function sendMessage(messageText) {
       const priorHistory = cleanHistory.slice(0, -1);
       const currentQuestion = cleanHistory[cleanHistory.length - 1];
       messagesForAPI = [
-        { role: "system", content: getSystemPrompt(uniqueAgents) },
+        { role: "system", content: getSystemPrompt(uniqueAgents) + `\n\n═══════════════════════════════════════════════\nRESEARCHER AGENT RESULTS\n═══════════════════════════════════════════════\nYour Researcher sub-agent automatically searched the web and returned the following live data from ${searchPayload.sources.join(", ")}. These are YOUR tools' results, not something the user provided. Base your answer on this data and cite sources inline.\n\n${searchPayload.context}\n═══════════════════════════════════════════════` },
         ...priorHistory,
-        {
-          role: "user",
-          content: `Before you answer my next message, here are live web search results I just fetched:\n\n${searchPayload.context}\n\nNow please answer using these results:`,
-        },
-        {
-          role: "assistant",
-          content: `Understood. I have current search results from ${searchPayload.sources.join(" and ")}. I will base my answer on this real data, not my training knowledge, and will cite the source for each fact.`,
-        },
         currentQuestion,
       ];
     } else {

@@ -2,7 +2,23 @@
   "permissions": {
     "allow": [
       "Bash(grep -E \"\\\\.\\(json|md|txt|config|env\\)$\")",
-      "Bash(node -c app.js)"
+      "Bash(node -c app.js)",
+      "Bash(curl -s \"https://api.duckduckgo.com/?q=Eiffel+Tower&format=json&no_html=1&skip_disambig=1\")",
+      "Bash(curl -sI \"https://api.duckduckgo.com/?q=test&format=json&no_html=1&skip_disambig=1\")",
+      "Bash(curl -s \"https://api.duckduckgo.com/?q=who%20is%20jensen%20huang&format=json&no_html=1&skip_disambig=1\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('Abstract:', bool\\(d.get\\('AbstractText'\\)\\)\\); print\\('Answer:', bool\\(d.get\\('Answer'\\)\\)\\); print\\('RelatedTopics:', len\\(d.get\\('RelatedTopics',[]\\)\\)\\);print\\('Type:', d.get\\('Type'\\)\\)\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('Abstract:',!!j.AbstractText,j.AbstractText?.slice\\(0,80\\)\\);console.log\\('Type:',j.Type\\);console.log\\('Topics:',j.RelatedTopics?.length\\);console.log\\('Answer:',j.Answer||'none'\\)}\\)\")",
+      "Bash(curl -s \"https://api.duckduckgo.com/?q=who%2520is%2520jensen%2520huang&format=json&no_html=1&skip_disambig=1\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('Abstract:',!!j.AbstractText\\);console.log\\('Type:',j.Type\\)}\\)\")",
+      "Bash(node:*)",
+      "Bash(curl -s \"https://api.duckduckgo.com/?q=test&format=json&no_html=1&skip_disambig=1\")",
+      "Bash(curl -sI \"https://lite.duckduckgo.com/lite/?q=NVIDIA+stock+price\")",
+      "Bash(curl -sI \"https://duckduckgo.com/ac/?q=NVIDIA+stock&type=list\")",
+      "Bash(curl -s \"https://searx.be/search?q=NVIDIA+stock+price&format=json&categories=general\" -H \"Accept: application/json\" --max-time 8)",
+      "Bash(curl -s \"https://www.googleapis.com/customsearch/v1?q=test&cx=dummy&key=dummy\" -I)",
+      "Bash(curl -sI \"https://api.search.brave.com/res/v1/web/search?q=test\")",
+      "Bash(curl -sI \"https://api.qwant.com/v3/search/web?q=test&count=5&locale=en_US\")",
+      "Bash(curl -s \"https://api.qwant.com/v3/search/web?q=NVIDIA+stock+price&count=5&locale=en_US&offset=0\" -H \"User-Agent: Mozilla/5.0\")"
     ]
   }
 }
